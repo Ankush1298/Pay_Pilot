@@ -1,0 +1,12 @@
+{
+  "network": "monadTestnet",
+  "chainId": 10143,
+  "rpc": "https://testnet-rpc.monad.xyz",
+  "explorer": "https://testnet.monadvision.com",
+  "faucet": "https://faucet.monad.xyz",
+  "deployed": false,
+  "IntentLockFactory": null,
+  "IntentLockWalletImpl": null,
+  "deployedAt": null,
+  "deploymentTx": null
+}
