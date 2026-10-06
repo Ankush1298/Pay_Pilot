@@ -24,7 +24,7 @@ _options: dict[str, dict[str, dict]] = {}  # user_id -> {option_id -> option}
 def parse(msg: str) -> dict:
     q = msg.lower()
     kind = "movie" if any(w in q for w in MOVIE_WORDS) and "hotel" not in q else "hotel"
-    city = next((c for c in CITIES if c.lower() in q), "Jaipur")
+    city = next((c for c in CITIES if c.lower() in q), None)
     nm = re.search(r"(\d+)\s*(?:night|day)", q)
     tk = re.search(r"(\d+)\s*(?:ticket|seat|people|person)", q)
     bm = re.search(r"(?:under|below|within|budget(?: of)?|max|upto|up to)\s*(?:₹|rs\.?|inr)?\s*([\d,]+)", q)
@@ -38,6 +38,14 @@ def parse(msg: str) -> dict:
 class Agent:
     def chat(self, gw: Gateway, user_id: str, message: str) -> dict:
         p = parse(message)
+        # If the city is not in the supported list, respond immediately.
+        if p["city"] is None:
+            return {
+                "text": "Currently service is not provided in the requested city.",
+                "options": [],
+                "browsed": [],
+                "query": p,
+            }
         gw.st.active_user_intent = {**p, "set_at": gw.st.now()}
         browsed, options = [], []
         label = "night" if p["kind"] == "hotel" else "ticket"
