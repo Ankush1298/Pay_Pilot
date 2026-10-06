@@ -35,14 +35,15 @@ export default function Dashboard() {
   const [manage, setManage] = useState<any>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { if (!loading && !user) router.replace("/"); }, [loading, user, router]);
-  useEffect(() => { if (user) loadState(); }, [user]);
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, intent]);
-
   const loadState = async () => {
     try { setState(await api.state.get()); }
     catch (e: any) { show("crit", e.message || "Could not load security state"); }
   };
+
+  useEffect(() => { if (!loading && !user) router.replace("/"); }, [loading, user, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (user) loadState(); }, [user]);
+  useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, intent]);
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +66,7 @@ export default function Dashboard() {
       const r = await api.agent.prepare(id);
       if (r.status === "executed" || r.status === "approved") {
         setIntent(null);
-        show("ok", `Auto-approved · ${r.booking?.confirmation || r.booking_id || "booking confirmed"}`);
+        show("ok", `Auto-approved · ${r.booking_id || "booking confirmed"}`);
         await loadState();
       } else if (r.status === "pending_approval" || r.status === "blocked") {
         setIntent(r);
@@ -88,7 +89,7 @@ export default function Dashboard() {
       }
       const r = await api.intents.approve(id, credential);
       setIntent(null);
-      if (r.status === "executed") show("ok", `Approved · ${r.booking?.confirmation || r.tx_hash || "completed"}`);
+      if (r.status === "executed") show("ok", `Approved · ${r.booking_id || r.tx_hash || "completed"}`);
       else if (r.status === "blocked") show("warn", "Security re-check blocked this transaction");
       else show("ok", "Request approved");
       await loadState();
@@ -201,7 +202,7 @@ export default function Dashboard() {
               <div key={i} className={`chat-bubble ${m.role} animate-fade-up`}>
                 <div>{m.content}</div>
                 {m.browsed?.length ? <div className="browse-list"><div className="browse-heading">Browsing activity</div>{m.browsed.map((b: any, j: number) => <div className="browse-row" key={j}><span className={`badge ${b.status === "ok" ? "badge-ok" : b.status === "flagged" ? "badge-danger" : "badge-warn"}`}>{b.status}</span><span className="browse-domain">{b.domain}</span><span className="browse-note">{b.note}</span></div>)}</div> : null}
-                {m.options?.length ? <div className="option-grid">{m.options.map((o: any) => <div className={`option-card ${o.best ? "best" : ""}`} key={o.id} onClick={() => !busy && book(o.id)}>{o.best && <span className="best-badge">BEST MATCH</span>}<div className="option-title">{o.title}</div><div className="option-meta">{o.merchant_name} · {o.city}</div><div className="rating">★ {o.rating ?? "—"} · {(o.reviews || 0).toLocaleString()} reviews</div><div className="option-price">{money(o.total)}</div><div className="option-meta">{o.perks || "Standard terms"}</div><button className="btn btn-secondary btn-sm" style={{ marginTop: 9 }} disabled={busy}>Review & book</button></div>)}</div> : null}
+                {m.options?.length ? <div className="option-grid">{m.options.map((o: any) => <div className={`option-card ${o.best ? "best" : ""}`} key={o.id} role="button" tabIndex={0} onClick={() => !busy && book(o.id)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!busy) book(o.id); } }}>{o.best && <span className="best-badge">BEST MATCH</span>}<div className="option-title">{o.title}</div><div className="option-meta">{o.merchant_name} · {o.city}</div><div className="rating">★ {o.rating ?? "—"} · {(o.reviews || 0).toLocaleString()} reviews</div><div className="option-price">{money(o.total)}</div><div className="option-meta">{o.perks || "Standard terms"}</div><button className="btn btn-secondary btn-sm" style={{ marginTop: 9 }} disabled={busy}>Review & book</button></div>)}</div> : null}
               </div>
             ))}
             {busy && !intent && <div className="chat-bubble agent"><div className="progress-dots"><span/><span/><span/></div></div>}
@@ -243,9 +244,9 @@ export default function Dashboard() {
         <div className="card"><div className="card-header"><div><div className="card-title">Audit trail</div><div className="card-sub">What the policy engine decided and why.</div></div><a className="text-link" href="/history">Full trail</a></div>{recentAudit.length ? <div className="compact-list">{recentAudit.map((a: any, i: number) => <div className="compact-row" key={i}><div><strong>{a.message}</strong><small>{dateTime(a.ts)}</small></div><span className={`badge ${a.level === "crit" ? "badge-danger" : a.level === "warn" ? "badge-warn" : "badge-ok"}`}>{a.level}</span></div>)}</div> : <div className="empty-inline">No activity yet.</div>}</div>
       </section>
 
-      {manage && <div className="modal-backdrop"><div className="modal"><div className="card-header"><div><h2>{manage.action === "cancel" ? "Cancel booking" : "Modify booking"}</h2><p>This action goes back through the security gate.</p></div><button className="icon-close" onClick={() => setManage(null)}>×</button></div><div className="verify-box"><div className="verify-line"><span>Booking</span><strong>{manage.booking.title}</strong></div><div className="verify-line"><span>Current amount</span><strong>{money(manage.booking.amount)}</strong></div>{manage.action === "modify" && <div className="field"><label>New quantity</label><input id="units" className="input" type="number" min="1" max="30" defaultValue={manage.booking.units + 1}/></div>}</div><div className="flex gap-2" style={{ marginTop: 18 }}><button className="btn btn-ghost flex-1" onClick={() => setManage(null)}>Back</button><button className="btn btn-primary flex-1" onClick={() => manageBooking(manage.action, manage.booking, manage.action === "modify" ? Number((document.getElementById("units") as HTMLInputElement)?.value) : undefined)} disabled={busy}>{busy ? "Checking…" : "Continue"}</button></div></div></div>}
+      {manage && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Manage booking"><div className="card-header"><div><h2>{manage.action === "cancel" ? "Cancel booking" : "Modify booking"}</h2><p>This action goes back through the security gate.</p></div><button className="icon-close" aria-label="Close" onClick={() => setManage(null)}>×</button></div><div className="verify-box"><div className="verify-line"><span>Booking</span><strong>{manage.booking.title}</strong></div><div className="verify-line"><span>Current amount</span><strong>{money(manage.booking.amount)}</strong></div>{manage.action === "modify" && <div className="field"><label htmlFor="units">New quantity</label><input id="units" className="input" type="number" min="1" max="30" defaultValue={manage.booking.units + 1}/></div>}</div><div className="flex gap-2" style={{ marginTop: 18 }}><button className="btn btn-ghost flex-1" onClick={() => setManage(null)}>Back</button><button className="btn btn-primary flex-1" onClick={() => manageBooking(manage.action, manage.booking, manage.action === "modify" ? Number((document.getElementById("units") as HTMLInputElement)?.value) : undefined)} disabled={busy}>{busy ? "Checking…" : "Continue"}</button></div></div></div>}
 
-      {intent && <div className="modal-backdrop"><div className="modal"><div className="card-header"><div><h2>Transaction security check</h2><p>Review exactly what the agent is asking PayPilot to authorize.</p></div><span className={`badge ${intent.decision?.verdict === "BLOCK" ? "badge-danger" : "badge-warn"}`}>{intent.decision?.verdict}</span></div><div className="verify-box"><div className="verify-line"><span>Purpose</span><strong>{intent.purpose}</strong></div><div className="verify-line"><span>Merchant</span><strong>{intent.merchant_name || intent.merchant_domain || "—"}</strong></div><div className="verify-line"><span>Website</span><strong className="mono">{intent.merchant_domain || "—"}</strong></div><div className="verify-line"><span>Amount</span><strong>{money(intent.amount)}</strong></div><div className="verify-line"><span>Destination</span><strong className="mono">{intent.pay_to ? `${intent.pay_to.slice(0, 10)}…${intent.pay_to.slice(-8)}` : "—"}</strong></div><div className="verify-line"><span>Risk</span><strong>{intent.decision?.risk ?? 0}/100</strong></div></div><div className="reason-list">{(intent.decision?.reasons || []).map((r: any, i: number) => <div key={i} className={`alert-strip ${r.severity === "block" ? "alert-strip-crit" : r.severity === "step_up" ? "alert-strip-warn" : "alert-strip-ok"}`}>{r.message}</div>)}</div>{intent.decision?.verdict === "BLOCK" && <div className="alert-strip alert-strip-crit">This request cannot be approved by the user. The policy engine has blocked it.</div>}<div className="flex gap-2" style={{ marginTop: 18 }}><button className="btn btn-ghost flex-1" onClick={reject} disabled={busy}>Reject</button>{intent.decision?.verdict !== "BLOCK" && <button className="btn btn-primary flex-1" onClick={approve} disabled={busy}>{busy ? "Verifying…" : intent.decision?.verdict === "STEP_UP" ? "Verify with Passkey" : "Approve"}</button>}</div></div></div>}
+      {intent && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Transaction security check"><div className="card-header"><div><h2>Transaction security check</h2><p>Review exactly what the agent is asking PayPilot to authorize.</p></div><span className={`badge ${intent.decision?.verdict === "BLOCK" ? "badge-danger" : "badge-warn"}`}>{intent.decision?.verdict}</span></div><div className="verify-box"><div className="verify-line"><span>Purpose</span><strong>{intent.purpose}</strong></div><div className="verify-line"><span>Merchant</span><strong>{intent.merchant_name || intent.merchant_domain || "—"}</strong></div><div className="verify-line"><span>Website</span><strong className="mono">{intent.merchant_domain || "—"}</strong></div><div className="verify-line"><span>Amount</span><strong>{money(intent.amount)}</strong></div><div className="verify-line"><span>Destination</span><strong className="mono">{intent.pay_to ? `${intent.pay_to.slice(0, 10)}…${intent.pay_to.slice(-8)}` : "—"}</strong></div><div className="verify-line"><span>Risk</span><strong>{intent.decision?.risk ?? 0}/100</strong></div></div><div className="reason-list">{(intent.decision?.reasons || []).map((r: any, i: number) => <div key={i} className={`alert-strip ${r.severity === "block" ? "alert-strip-crit" : r.severity === "step_up" ? "alert-strip-warn" : "alert-strip-ok"}`}>{r.message}</div>)}</div>{intent.decision?.verdict === "BLOCK" && <div className="alert-strip alert-strip-crit">This request cannot be approved by the user. The policy engine has blocked it.</div>}<div className="flex gap-2" style={{ marginTop: 18 }}><button className="btn btn-ghost flex-1" onClick={reject} disabled={busy}>Reject</button>{intent.decision?.verdict !== "BLOCK" && <button className="btn btn-primary flex-1" onClick={approve} disabled={busy}>{busy ? "Verifying…" : intent.decision?.verdict === "STEP_UP" ? "Verify with Passkey" : "Approve"}</button>}</div></div></div>}
     </div>
   );
 }

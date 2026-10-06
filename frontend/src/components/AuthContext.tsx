@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 
 type AuthContextType = {
   user: any;
@@ -44,6 +44,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     checkAuth();
+    const drop = () => setUser(null);          // any API call that comes back 401 means the session is gone
+    window.addEventListener("paypilot:unauthorized", drop);
+    return () => window.removeEventListener("paypilot:unauthorized", drop);
   }, []);
 
   return (

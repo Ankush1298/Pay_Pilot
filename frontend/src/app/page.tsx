@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthContext";
 import { useToast } from "@/components/ToastContext";
-import { api } from "@/lib/api";
 import { signupPasskey, loginPasskey } from "@/lib/passkeys";
 
 export default function AuthPage() {
@@ -36,7 +35,7 @@ export default function AuthPage() {
     setBusy(true);
     try {
       const ceiling = Math.max(0, Math.min(25000, Number(limit) || 1500));
-      await signupPasskey(displayName || "PayPilot user", { per_tx_limit: ceiling, daily_limit: Math.max(ceiling * 3, 5000) });
+      await signupPasskey(displayName || "PayPilot user", { per_tx_limit: ceiling, daily_limit: Math.min(25000, Math.max(ceiling * 3, 5000)) });
       await checkAuth();
       show("ok", "Account created successfully with Passkey.");
     } catch (err: any) {
@@ -74,7 +73,7 @@ export default function AuthPage() {
             </button>
             <div className="text-center" style={{ marginTop: "1.5rem" }}>
               <p>
-                Don't have an account?{" "}
+                Don&apos;t have an account?{" "}
                 <a href="#" onClick={(e) => { e.preventDefault(); setIsLogin(false); }} className="text-accent">
                   Sign up
                 </a>
@@ -84,8 +83,9 @@ export default function AuthPage() {
         ) : (
           <form onSubmit={handleSignup} className="flex-col gap-4">
             <div className="field">
-              <label>Display name</label>
+              <label htmlFor="displayName">Display name</label>
               <input
+                id="displayName"
                 type="text"
                 className="input"
                 value={displayName}
@@ -95,8 +95,8 @@ export default function AuthPage() {
               />
             </div>
             <div className="field">
-              <label>Automatic approval ceiling (₹)</label>
-              <input type="number" min="0" max="25000" className="input" value={limit} onChange={e => setLimit(e.target.value)} required />
+              <label htmlFor="ceiling">Automatic approval ceiling (₹)</label>
+              <input id="ceiling" type="number" min="0" max="25000" className="input" value={limit} onChange={e => setLimit(e.target.value)} required />
               <span className="field-help">Used by the policy engine. The AI never receives this rule.</span>
             </div>
             

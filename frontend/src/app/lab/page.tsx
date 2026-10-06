@@ -47,7 +47,7 @@ export default function LabPage() {
       <div className="grid-2">
         <div className="flex-col gap-3">
           {SCENARIOS.map(s => (
-            <div key={s.id} className={`card option-card ${running === s.id ? "glow-border" : ""}`} onClick={() => !running && runScenario(s.id)}>
+            <div key={s.id} role="button" tabIndex={0} className={`card option-card ${running === s.id ? "glow-border" : ""}`} onClick={() => !running && runScenario(s.id)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!running) runScenario(s.id); } }}>
               <div className="flex justify-between items-start">
                 <div>
                   <h4>{s.title}</h4>

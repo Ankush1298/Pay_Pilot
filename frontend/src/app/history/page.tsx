@@ -12,6 +12,7 @@ export default function HistoryPage() {
   const { user } = useAuth();
   const { show } = useToast();
   const [s, setS] = useState<any>(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (user) api.state.get().then(setS).catch((e: any) => show("crit", e.message)); }, [user]);
   if (!user || !s) return null;
   const bookings = s.bookings || [];

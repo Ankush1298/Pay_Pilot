@@ -1,14 +1,19 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "./AuthContext";
 import { IconHome, IconSettings, IconLogOut, IconActivity } from "./Icons";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user && pathname !== "/") router.replace("/");
+  }, [loading, user, pathname, router]);
 
   if (!user) return <>{children}</>;
 
@@ -24,7 +29,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <h2>PayPilot</h2>
           <p>Secure Agentic Payments</p>
         </div>
-        <nav className="flex-col gap-1" style={{ padding: "0 0.5rem" }}>
+        <nav aria-label="Main" className="flex-col gap-1" style={{ padding: "0 0.5rem" }}>
           <Link href="/dashboard" className={`nav-item ${pathname === "/dashboard" ? "active" : ""}`}>
             <IconHome />
             Dashboard

@@ -30,7 +30,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ show }}>
       {children}
-      <div className="toast-area">
+      <div className="toast-area" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className="toast" style={{ borderColor: 
             t.type === "crit" ? "var(--danger)" : 

@@ -16,8 +16,11 @@ async function request(endpoint: string, options: RequestOptions = {}) {
     body = JSON.stringify(body);
   }
   const res = await fetch(url, { ...options, headers, body, credentials: "same-origin" });
-  const data = await res.json().catch(() => null);
+  const data = await res.json().catch(() => null);   // non-JSON (e.g. a proxy error page) falls through to the status text
 
+  if (res.status === 401 && typeof window !== "undefined" && !endpoint.startsWith("/auth/login") && !endpoint.startsWith("/auth/register")) {
+    window.dispatchEvent(new Event("paypilot:unauthorized"));
+  }
   if (!res.ok) {
     throw new ApiError(
       res.status,
