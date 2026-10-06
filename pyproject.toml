@@ -1,0 +1,11 @@
+[tool.ruff]
+line-length = 140
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+# The codebase deliberately uses compact one-line statements; keep the rules that find real bugs.
+ignore = ["E501", "B008", "B904", "E701", "E702", "E401", "E731", "E741"]
+
+[tool.mypy]
+ignore_missing_imports = true
+check_untyped_defs = false

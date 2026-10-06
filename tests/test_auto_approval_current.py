@@ -1,4 +1,3 @@
-from app.state import State
 from app.gateway import Gateway
 from app.merchants import addr
 
