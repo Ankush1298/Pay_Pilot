@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import secrets
 
+from . import config
 from .gateway import Gateway, GatewayError
+from .ledger import MockLedger
 from . import merchants as M
 
 SCENARIOS: dict[str, tuple[str, str]] = {
@@ -37,8 +39,8 @@ SCENARIOS: dict[str, tuple[str, str]] = {
     ),
     "daily_limit": (
         "Daily spend limit",
-        "Two quick bookings push the 24 h spend over the ₹5,000 daily limit. "
-        "The third payment triggers a step-up.",
+        "With the per-transaction ceiling raised to ₹2,500 for this demo, two ₹2,400 bookings pass; "
+        "the third pushes 24 h spend over the ₹5,000 daily limit and triggers a step-up.",
     ),
     "velocity": (
         "Velocity limit",
@@ -48,23 +50,23 @@ SCENARIOS: dict[str, tuple[str, str]] = {
 }
 
 
-def _lab_sess(gw: Gateway, user_id: str) -> dict:
-    """Create or reuse a sandboxed lab session on the real (trusted) device."""
-    # Use the first trusted device as the lab signer
-    trusted = next((d for d in gw.st.devices.values() if d["status"] == "trusted"), None)
-    if not trusted:
-        raise GatewayError(409, "no_trusted_device", "You need at least one trusted device to run lab scenarios")
-    sid = "lab_" + secrets.token_hex(6)
-    sess = gw.ensure_session(sid, trusted["id"])
-    sess["lab"] = True   # sandboxed: strikes don't end the real account
-    return sess
+def _sandbox() -> tuple[Gateway, dict]:
+    """A throwaway gateway with a simulated ledger: lab attacks can never touch the real account,
+    its limits, devices, ledger or the user's active intent."""
+    sb = Gateway("lab_" + secrets.token_hex(6), "lab", config.MASTER_KEY)
+    sb.ledger = MockLedger(sb._exec_key, sb.wallet)
+    dev = sb.add_device("Lab laptop", trusted=True)
+    sess = sb.ensure_session("lab_" + secrets.token_hex(6), dev["id"])
+    sess["lab"] = True
+    sb.st.active_user_intent = {"kind": "hotel", "budget": 10000, "set_at": sb.st.now()}
+    return sb, sess
 
 
-def run(gw: Gateway, real_sess: dict, user_id: str, scenario: str) -> dict:
+def run(real_gw: Gateway, real_sess: dict, user_id: str, scenario: str) -> dict:
     if scenario not in SCENARIOS:
         raise GatewayError(404, "no_scenario", f"Unknown scenario '{scenario}'")
 
-    lab = _lab_sess(gw, user_id)
+    gw, lab = _sandbox()
     steps: list[dict] = []
 
     def step(label: str, fn):
@@ -78,10 +80,6 @@ def run(gw: Gateway, real_sess: dict, user_id: str, scenario: str) -> dict:
             return None
 
     def with_intent(fn):
-        lab["active_user_intent"] = {"kind": "hotel", "budget": 10000, "set_at": gw.st.now()} # Use lab session dict if it holds it? Wait, st holds it!
-        # Actually, st.active_user_intent is global to the state.
-        # Let's just set it on gw.st.
-        gw.st.active_user_intent = {"kind": "hotel", "budget": 10000, "set_at": gw.st.now()}
         return fn()
 
     if scenario == "auto_approve":
@@ -144,8 +142,9 @@ def run(gw: Gateway, real_sess: dict, user_id: str, scenario: str) -> dict:
                                       lab=True)))
 
     elif scenario == "daily_limit":
-        # Two bookings to push near the limit, then a third that triggers step-up
-        for i, (title, amount) in enumerate([("Booking 1", 2200), ("Booking 2", 2200), ("Booking 3 – triggers daily limit", 1000)], 1):
+        # Per-transaction ceiling raised to ₹2,500 (sandbox only) so two big bookings pass and the third trips the daily cap
+        gw.st.policy["per_tx_limit"] = 2500
+        for i, (title, amount) in enumerate([("Booking 1", 2400), ("Booking 2", 2400), ("Booking 3 – triggers daily limit", 1000)], 1):
             step(f"Payment {i}: {title} (₹{amount})",
                  lambda a=amount, t=title: with_intent(lambda: gw.submit_intent(lab, origin="agent", type="hotel",
                                                              merchant_domain="grandstay.mock",
