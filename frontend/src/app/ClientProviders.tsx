@@ -1,19 +1,22 @@
 "use client";
 
-import { AuthProvider } from "@/components/AuthContext";
-import { ToastProvider } from "@/components/ToastContext";
-import { AppLayout } from "@/components/AppLayout";
+import { LazyMotion, MotionConfig, domAnimation } from "framer-motion";
 import { ReactNode } from "react";
+import { AuthProvider } from "@/components/AuthContext";
+import { CookieBanner } from "@/components/CookieBanner";
+import { ToastProvider } from "@/components/ToastContext";
 
 export function ClientProviders({ children }: { children: ReactNode }) {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <AppLayout>
-          {children}
-        </AppLayout>
-      </AuthProvider>
-    </ToastProvider>
+    <LazyMotion features={domAnimation} strict>
+      <MotionConfig reducedMotion="user">
+        <ToastProvider>
+          <AuthProvider>
+            {children}
+            <CookieBanner />
+          </AuthProvider>
+        </ToastProvider>
+      </MotionConfig>
+    </LazyMotion>
   );
 }
-

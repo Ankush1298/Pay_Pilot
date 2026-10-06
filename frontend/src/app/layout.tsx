@@ -1,33 +1,33 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import "@fontsource-variable/inter/wght.css";
+import "@fontsource/jetbrains-mono/400.css";
 import { ClientProviders } from "./ClientProviders";
+import { site } from "@/config/site";
 import "./globals.css";
+import "./site.css";
 
 export const metadata: Metadata = {
-  title: "PayPilot — AI Payment Security",
-  description:
-    "The AI proposes. The policy decides. You approve. Secure AI transaction layer with passkey verification.",
-  openGraph: {
-    title: "PayPilot",
-    description: "Secure AI payment layer with policy-engine enforcement and passkey approvals.",
-    type: "website",
-  },
+  metadataBase: new URL(site.url),
+  title: { default: `${site.name}: AI payment security with passkeys`, template: `%s · ${site.name}` },
+  description: site.description,
+  applicationName: site.name,
+  openGraph: { title: site.name, description: site.description, type: "website", siteName: site.name, url: site.url },
+  twitter: { card: "summary_large_image", title: site.name, description: site.description },
+  alternates: { canonical: "/" },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export const viewport: Viewport = { themeColor: "#080d10", width: "device-width", initialScale: 1 };
+
+// Applies a saved theme before first paint (only exists if the visitor allowed preference storage).
+const themeScript = `try{var t=localStorage.getItem('pp_theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`;
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content="#f4f7f8" />
-      </head>
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
       <body>
-        <ClientProviders>
-          {children}
-        </ClientProviders>
+        <a href="#main" className="skip-link">Skip to content</a>
+        <ClientProviders>{children}</ClientProviders>
       </body>
     </html>
   );

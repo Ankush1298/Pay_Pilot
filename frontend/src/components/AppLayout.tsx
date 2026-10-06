@@ -12,10 +12,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user && pathname !== "/") router.replace("/");
+    if (!loading && !user) router.replace("/login");
   }, [loading, user, pathname, router]);
 
-  if (!user) return <>{children}</>;
+  if (!user) return <div className="auth-wrap" role="status" aria-label="Loading"><div className="spinner" /></div>;
 
   const handleLogout = async () => {
     await logout();
