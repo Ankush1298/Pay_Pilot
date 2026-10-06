@@ -15,18 +15,22 @@ The AI can browse, compare and prepare a transaction, but it never receives the 
 | Payment exceeds automatic ceiling | Policy returns STEP_UP; WebAuthn UV is required |
 | Unknown/lookalike website | Merchant registry + lookalike detection + step-up/block |
 | Payment destination changes after approval | Exact transaction hash binds merchant, amount, purpose, expiry and nonce |
-| Replay | One-time intent status + nonce + expiry; the reference contract also tracks `used[intentHash]` |
+| Replay | One-time intent status + nonce + expiry; the ledger refuses a digest it has already settled; the reference contract also tracks `used[intentHash]` |
 | New device | New passkey login creates a pending device; payments are locked for the configured hold |
 | Three suspicious attempts | Session termination and pending-device block; user signs in again with a passkey |
 | Relayer compromise (reference contract) | Relayer has no policy key; the contract requires a policy signature and, for STEP_UP, a passkey signature |
 | Policy-service compromise | **Out of scope / known weakness.** In the reference contract the policy signer alone can add a passkey or mark a merchant trusted, so a compromised policy service is not contained by the user's passkey. Needs a passkey-gated admin path before any real use |
+| Brute force / abuse of auth endpoints | Per-IP rate limits on sign-up, login, approval and merchant sign-in; challenges are random, single-use, 120 s, and bound to the intent digest for approvals |
+| Cross-site request forgery | Origin allowlist on every state-changing `/api` call, `SameSite=Lax` cookies, and no wildcard CORS |
+| Stolen session cookie | Server-side sessions expire after 7 days and are revoked on logout / new login (rotation); step-up actions still need a passkey assertion |
+| Lab scenarios used to tamper with the real account | Lab runs in a throwaway gateway with its own simulated ledger |
 | Passkey credential theft | WebAuthn user verification (UV) is required; credential private key remains with the platform authenticator |
 | Password database breach | There are no passwords or password hashes |
 | Recovery-code theft | There are no recovery codes; users register additional synced passkeys |
 
 ## WebAuthn verification
 
-The browser uses discoverable WebAuthn credentials. The backend verifies the RP ID, origin, challenge, UP/UV flags, signature and sign counter. The reference contract (not deployed, on-chain WebAuthn path not yet covered by tests) is written to use a maintained `WebAuthn`/`P256` library rather than a hand-rolled verifier. The on-chain assertion reconstructs the WebAuthn message as `SHA256(authenticatorData || SHA256(clientDataJSON))` and requires `webauthn.get`, the expected base64url challenge, UP and UV.
+The browser uses discoverable WebAuthn credentials. The backend verifies the (configured, not request-derived) RP ID, an allowlisted origin, challenge, UP/UV flags, the attested credential id and P-256 key, the signature and the sign counter. The reference contract (not deployed, on-chain WebAuthn path not yet covered by tests) is written to use a maintained `WebAuthn`/`P256` library rather than a hand-rolled verifier. The on-chain assertion reconstructs the WebAuthn message as `SHA256(authenticatorData || SHA256(clientDataJSON))` and requires `webauthn.get`, the expected base64url challenge, UP and UV.
 
 ## Important limitations
 

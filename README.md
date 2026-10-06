@@ -25,7 +25,7 @@ cd frontend && npm install && npm run dev      # http://localhost:3000
 ```
 
 `./run.sh` does both. Open <http://localhost:3000>. Use `localhost` (WebAuthn needs a secure context
-and the relying-party ID defaults to `localhost`; override with `PAYPILOT_RP_ID`). You need a browser
+and the relying-party ID defaults to `localhost`; override with `PAYPILOT_RP_ID`; add other origins with `PAYPILOT_ORIGINS`). You need a browser
 and device that support passkeys (Touch ID, Windows Hello, Android, or a security key).
 
 Tests: `pip install -r requirements-dev.txt && python -m pytest -q` (includes an end-to-end run with a software
@@ -45,9 +45,11 @@ passkey, `tests/virtual_authenticator.py`). Lint/types: `ruff check app tests &&
    without a prompt. Above the ceiling, for an unfamiliar merchant, P2P, cancellation or other sensitive
    actions, a **passkey assertion whose challenge is the digest of that exact transaction** is required.
 5. **Compromised-agent defense.** The Security Lab lets the agent meet a prompt injection that tries to
-   redirect payment; the policy engine blocks the payout-address mismatch.
+   redirect payment; the policy engine blocks the payout-address mismatch. Lab scenarios run in a throwaway sandbox account
+   (own devices, limits and ledger), so they never change your real bookings, spend counters or active task.
 6. **New-device protection.** The same passkey can sign in on another browser, but that browser is a
-   pending device and cannot spend until a trusted device approves it (or blocks it).
+   pending device. For the hold period (24 h by default) it cannot spend; a trusted device can approve or block it.
+   After the hold, a pending device can still only pay with a fresh passkey assertion (every payment is a step-up).
 7. **Booking lifecycle.** Cancellation, refund and modification go back through the same policy gate.
 
 ## How passkey approval works
@@ -104,8 +106,10 @@ official docs: <https://docs.monad.xyz/developer-essentials/testnets>. Live mode
 * The OS passkey prompt cannot show transaction details; PayPilot's own dialog renders them from the
   server's record, and the signature binds to the same digest.
 * The WebAuthn CBOR parser is a minimal subset for `none` attestation. Use a vetted library in production.
-* Single relying party (`localhost` by default); rate limiting is in-process per IP.
-* The master key has a development default unless `PAYPILOT_MASTER_KEY` is set.
+* Single relying party (`localhost` by default). Rate limits (sign-up, login, approvals, lab, merchant sign-in) are in-process and keyed on the
+  socket peer address, so behind the Next.js dev proxy every browser shares `127.0.0.1`. Put a real proxy in front and trust its forwarded header before deploying.
+* Cookies are `HttpOnly; SameSite=Lax` and get `Secure` automatically when the request origin is `https`. Run it over HTTPS outside localhost.
+* Without `PAYPILOT_MASTER_KEY` a random key is generated per process (nothing persists anyway). No key is stored in source.
 * The injection scanner is a heuristic; the real defense is that policy ignores what the AI believes.
 * Not audited. Do not use real funds.
 
