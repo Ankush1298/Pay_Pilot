@@ -49,7 +49,7 @@
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding-top: 24px; padding-bottom: 24px; }
 .stat { text-align: center; padding: 22px 12px; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--bg-card); }
 .stat strong { display: block; font-size: 2.2rem; color: var(--accent-bright); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.stat span { color: var(--text-secondary); font-size: .88rem; }
+
 @media (max-width: 700px) { .stats { grid-template-columns: repeat(2, 1fr); } }
 .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .feature-grid > div { display: flex; }
@@ -167,3 +167,32 @@ textarea.input { resize: vertical; min-height: 120px; font-family: inherit; }
 .inferred-box { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--warn); background: var(--warn-dim); border-radius: var(--radius-lg); }
 .inferred-box strong { display: block; margin-bottom: 6px; }
 .inferred-box li { margin-left: 1.1rem; font-size: .88rem; }
+
+/* dashboard layout with the chat sidebar: chat takes the main column, side panels sit beside/below it */
+.dashboard-grid { grid-template-columns: minmax(0, 1fr) 280px; }
+.dashboard-grid .left-rail { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+.dashboard-grid .chat-card { grid-column: 1; grid-row: 1; }
+.dashboard-grid .right-rail { grid-column: 2; grid-row: 1; }
+@media (max-width: 1180px) { .dashboard-grid { grid-template-columns: minmax(0, 1fr); } .dashboard-grid .right-rail { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: repeat(3, 1fr); } .dashboard-grid .left-rail { grid-row: 3; } }
+@media (max-width: 900px) { .dashboard-grid .right-rail, .dashboard-grid .left-rail { display: flex; flex-direction: column; } .dashboard-grid .chat-card { order: 0; } }
+.stat > span { color: var(--text-secondary); font-size: .88rem; }
+.stat strong span { font-size: inherit; color: inherit; }
+.hero-word { margin-right: .26em; }
+
+/* classes the pages used but globals.css never defined */
+.security-stack { display: grid; gap: 8px; }
+.security-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-surface); }
+.security-row .left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.security-row .left > div:last-child { display: grid; min-width: 0; }
+.security-row strong { font-size: .85rem; } .security-row span, .security-row small { color: var(--text-secondary); font-size: .75rem; }
+.security-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: var(--radius-md); background: var(--accent-dim); color: var(--accent-bright); font: 600 .8rem var(--font-mono); }
+.option-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-top: 10px; }
+.browse-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 4px 0; font-size: .78rem; }
+.browse-domain { font-family: var(--font-mono); } .browse-note { color: var(--text-secondary); flex-basis: 100%; }
+.card-title { font-weight: 650; font-size: .98rem; color: var(--text-primary); }
+.card-sub { font-size: .76rem; color: var(--text-secondary); margin-top: 2px; }
+.modal { background: var(--bg-card); }
+
+/* links inside running text must not rely on colour alone */
+p a, li a, .auth-fine a, a.text-accent, .cookie-body a { text-decoration: underline; text-underline-offset: 2px; }
+.footer-col a, .footer-brand a, .nav-link, .logo, .btn { text-decoration: none; }

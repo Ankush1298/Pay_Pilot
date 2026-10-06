@@ -1,6 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import "@fontsource-variable/inter/wght.css";
-import "@fontsource/jetbrains-mono/400.css";
 import { ClientProviders } from "./ClientProviders";
 import { site } from "@/config/site";
 import "./globals.css";
@@ -13,7 +11,6 @@ export const metadata: Metadata = {
   applicationName: site.name,
   openGraph: { title: site.name, description: site.description, type: "website", siteName: site.name, url: site.url },
   twitter: { card: "summary_large_image", title: site.name, description: site.description },
-  alternates: { canonical: "/" },
 };
 
 export const viewport: Viewport = { themeColor: "#080d10", width: "device-width", initialScale: 1 };

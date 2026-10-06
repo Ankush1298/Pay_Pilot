@@ -50,7 +50,7 @@ export default function Home() {
         <Reveal><h2 className="section-title">How it works</h2></Reveal>
         <ol className="steps">
           {steps.map(([n, t, d], i) => (
-            <Reveal key={n} delay={i * 0.08}><li className="step"><span className="step-n">{n}</span><h3>{t}</h3><p>{d}</p></li></Reveal>
+            <li key={n}><Reveal delay={i * 0.08}><div className="step"><span className="step-n">{n}</span><h3>{t}</h3><p>{d}</p></div></Reveal></li>
           ))}
         </ol>
       </section>
