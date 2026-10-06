@@ -44,9 +44,16 @@ export const api = {
     get: () => request("/state"),
   },
   agent: {
-    chat: (message: string) => request("/agent/chat", { method: "POST", body: { message } }),
-    prepare: (option_id: string) => request("/agent/prepare", { method: "POST", body: { option_id } }),
+    chat: (message: string, conversation_id?: string) => request("/agent/chat", { method: "POST", body: { message, conversation_id } }),
+    prepare: (option_id: string, conversation_id?: string) => request("/agent/prepare", { method: "POST", body: { option_id, conversation_id } }),
     manage: (bookingId: string, action: "cancel" | "modify", units?: number) => request(`/agent/bookings/${bookingId}/${action}`, { method: "POST", body: { units } }),
+  },
+  chats: {
+    list: () => request("/chat/conversations"),
+    create: () => request("/chat/conversations", { method: "POST" }),
+    get: (id: string) => request(`/chat/conversations/${id}`),
+    editContext: (id: string, context: Record<string, unknown>) => request(`/chat/conversations/${id}/context`, { method: "PATCH", body: { context } }),
+    remove: (id: string) => request(`/chat/conversations/${id}`, { method: "DELETE" }),
   },
   intents: {
     approvalOpts: (id: string) => request(`/intents/${id}/approval-options`, { method: "POST" }),

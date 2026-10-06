@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthContext";
 import { useToast } from "@/components/ToastContext";
 import { api } from "@/lib/api";
 import { assertPasskey } from "@/lib/passkeys";
-
-type Msg = { role: "user" | "agent"; content: string; options?: any[]; browsed?: any[] };
+import { ChatPanel } from "@/components/ChatPanel";
+import { DashboardSkeleton } from "@/components/Skeleton";
+import { VerdictMark } from "@/components/VerdictMark";
 
 const MOMENTS = [
   { id: "auto_approve", n: "01", title: "₹800 hotel auto-approves", desc: "Trusted device + verified merchant + within policy." },
@@ -24,16 +25,13 @@ export default function Dashboard() {
   const router = useRouter();
   const { show } = useToast();
   const [state, setState] = useState<any>(null);
-  const [messages, setMessages] = useState<Msg[]>([
-    { role: "agent", content: "Tell me what you want to book. I can search across available sites, compare price and reviews, and stop at the security gate before money moves." },
-  ]);
-  const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [intent, setIntent] = useState<any>(null);
   const [labResult, setLabResult] = useState<any>(null);
   const [labBusy, setLabBusy] = useState<string | null>(null);
   const [manage, setManage] = useState<any>(null);
-  const bottom = useRef<HTMLDivElement>(null);
+  const [verdict, setVerdict] = useState<null | { kind: "approved" | "denied"; text: string }>(null);
+  const [chatRefresh, setChatRefresh] = useState(0);
 
   const loadState = async () => {
     try { setState(await api.state.get()); }
@@ -43,27 +41,13 @@ export default function Dashboard() {
   useEffect(() => { if (!loading && !user) router.replace("/"); }, [loading, user, router]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (user) loadState(); }, [user]);
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, intent]);
 
-  const send = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || busy) return;
-    const text = input.trim();
-    setInput("");
-    setMessages(x => [...x, { role: "user", content: text }]);
-    setBusy(true);
-    try {
-      const r = await api.agent.chat(text);
-      setMessages(x => [...x, { role: "agent", content: r.text, options: r.options, browsed: r.browsed }]);
-    } catch (e: any) { show("crit", e.message || "Agent request failed"); }
-    finally { setBusy(false); }
-  };
-
-  const book = async (id: string) => {
+  const book = async (id: string, conversationId?: string) => {
     setBusy(true);
     setIntent(null);
     try {
-      const r = await api.agent.prepare(id);
+      const r = await api.agent.prepare(id, conversationId);
+      setChatRefresh((k) => k + 1);
       if (r.status === "executed" || r.status === "approved") {
         setIntent(null);
         show("ok", `Auto-approved · ${r.booking_id || "booking confirmed"}`);
@@ -88,10 +72,8 @@ export default function Dashboard() {
         credential = await assertPasskey(opts);
       }
       const r = await api.intents.approve(id, credential);
-      setIntent(null);
-      if (r.status === "executed") show("ok", `Approved · ${r.booking_id || r.tx_hash || "completed"}`);
-      else if (r.status === "blocked") show("warn", "Security re-check blocked this transaction");
-      else show("ok", "Request approved");
+      if (r.status === "blocked") { setIntent(null); show("warn", "Security re-check blocked this transaction"); }
+      else { setVerdict({ kind: "approved", text: r.booking_id ? `Approved. Booking ${r.booking_id} confirmed.` : "Approved." }); setTimeout(() => { setVerdict(null); setIntent(null); }, 1600); }
       await loadState();
     } catch (e: any) {
       // A second click/tab can race the first approval. Treat a consumed intent as stale UI,
@@ -108,9 +90,9 @@ export default function Dashboard() {
 
   const reject = async () => {
     if (!intent) return;
-    try { await api.intents.reject(intent.id); show("info", "Request rejected"); }
-    catch (e: any) { if (e.code !== "not_pending") show("crit", e.message); }
-    finally { setIntent(null); await loadState(); }
+    try { await api.intents.reject(intent.id); setVerdict({ kind: "denied", text: "Denied. Nothing was charged." }); setTimeout(() => { setVerdict(null); setIntent(null); }, 1300); }
+    catch (e: any) { if (e.code !== "not_pending") show("crit", e.message); setIntent(null); }
+    finally { await loadState(); }
   };
 
   const manageBooking = async (action: "cancel" | "modify", booking: any, units?: number) => {
@@ -141,6 +123,7 @@ export default function Dashboard() {
   const policy = state?.policy;
 
   if (!user) return null;
+  if (!state) return <DashboardSkeleton />;
 
   return (
     <div className="page">
@@ -192,24 +175,7 @@ export default function Dashboard() {
           </section>
         </aside>
 
-        <section className="card chat-card">
-          <div className="chat-head">
-            <div><div className="card-title">AI booking assistant</div><div className="card-sub"><span className="status-dot" /> No payment key · cannot approve its own request</div></div>
-            <span className="badge badge-info">Agent discovery</span>
-          </div>
-          <div className="chat-wrap">
-            {messages.map((m, i) => (
-              <div key={i} className={`chat-bubble ${m.role} animate-fade-up`}>
-                <div>{m.content}</div>
-                {m.browsed?.length ? <div className="browse-list"><div className="browse-heading">Browsing activity</div>{m.browsed.map((b: any, j: number) => <div className="browse-row" key={j}><span className={`badge ${b.status === "ok" ? "badge-ok" : b.status === "flagged" ? "badge-danger" : "badge-warn"}`}>{b.status}</span><span className="browse-domain">{b.domain}</span><span className="browse-note">{b.note}</span></div>)}</div> : null}
-                {m.options?.length ? <div className="option-grid">{m.options.map((o: any) => <div className={`option-card ${o.best ? "best" : ""}`} key={o.id} role="button" tabIndex={0} onClick={() => !busy && book(o.id)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!busy) book(o.id); } }}>{o.best && <span className="best-badge">BEST MATCH</span>}<div className="option-title">{o.title}</div><div className="option-meta">{o.merchant_name} · {o.city}</div><div className="rating">★ {o.rating ?? "—"} · {(o.reviews || 0).toLocaleString()} reviews</div><div className="option-price">{money(o.total)}</div><div className="option-meta">{o.perks || "Standard terms"}</div><button className="btn btn-secondary btn-sm" style={{ marginTop: 9 }} disabled={busy}>Review & book</button></div>)}</div> : null}
-              </div>
-            ))}
-            {busy && !intent && <div className="chat-bubble agent"><div className="progress-dots"><span/><span/><span/></div></div>}
-            <div ref={bottom} />
-          </div>
-          <form className="chat-form" onSubmit={send}><input className="input" value={input} onChange={e => setInput(e.target.value)} placeholder="Find the cheapest 4-star hotel in Jaipur under ₹5,000" disabled={busy}/><button className="btn btn-primary" disabled={busy || !input.trim()}>Search</button></form>
-        </section>
+        <ChatPanel onBook={book} busy={busy} refreshKey={chatRefresh} />
 
         <aside className="right-rail">
           <section className="card">
@@ -246,7 +212,7 @@ export default function Dashboard() {
 
       {manage && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Manage booking"><div className="card-header"><div><h2>{manage.action === "cancel" ? "Cancel booking" : "Modify booking"}</h2><p>This action goes back through the security gate.</p></div><button className="icon-close" aria-label="Close" onClick={() => setManage(null)}>×</button></div><div className="verify-box"><div className="verify-line"><span>Booking</span><strong>{manage.booking.title}</strong></div><div className="verify-line"><span>Current amount</span><strong>{money(manage.booking.amount)}</strong></div>{manage.action === "modify" && <div className="field"><label htmlFor="units">New quantity</label><input id="units" className="input" type="number" min="1" max="30" defaultValue={manage.booking.units + 1}/></div>}</div><div className="flex gap-2" style={{ marginTop: 18 }}><button className="btn btn-ghost flex-1" onClick={() => setManage(null)}>Back</button><button className="btn btn-primary flex-1" onClick={() => manageBooking(manage.action, manage.booking, manage.action === "modify" ? Number((document.getElementById("units") as HTMLInputElement)?.value) : undefined)} disabled={busy}>{busy ? "Checking…" : "Continue"}</button></div></div></div>}
 
-      {intent && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Transaction security check"><div className="card-header"><div><h2>Transaction security check</h2><p>Review exactly what the agent is asking PayPilot to authorize.</p></div><span className={`badge ${intent.decision?.verdict === "BLOCK" ? "badge-danger" : "badge-warn"}`}>{intent.decision?.verdict}</span></div><div className="verify-box"><div className="verify-line"><span>Purpose</span><strong>{intent.purpose}</strong></div><div className="verify-line"><span>Merchant</span><strong>{intent.merchant_name || intent.merchant_domain || "—"}</strong></div><div className="verify-line"><span>Website</span><strong className="mono">{intent.merchant_domain || "—"}</strong></div><div className="verify-line"><span>Amount</span><strong>{money(intent.amount)}</strong></div><div className="verify-line"><span>Destination</span><strong className="mono">{intent.pay_to ? `${intent.pay_to.slice(0, 10)}…${intent.pay_to.slice(-8)}` : "—"}</strong></div><div className="verify-line"><span>Risk</span><strong>{intent.decision?.risk ?? 0}/100</strong></div></div><div className="reason-list">{(intent.decision?.reasons || []).map((r: any, i: number) => <div key={i} className={`alert-strip ${r.severity === "block" ? "alert-strip-crit" : r.severity === "step_up" ? "alert-strip-warn" : "alert-strip-ok"}`}>{r.message}</div>)}</div>{intent.decision?.verdict === "BLOCK" && <div className="alert-strip alert-strip-crit">This request cannot be approved by the user. The policy engine has blocked it.</div>}<div className="flex gap-2" style={{ marginTop: 18 }}><button className="btn btn-ghost flex-1" onClick={reject} disabled={busy}>Reject</button>{intent.decision?.verdict !== "BLOCK" && <button className="btn btn-primary flex-1" onClick={approve} disabled={busy}>{busy ? "Verifying…" : intent.decision?.verdict === "STEP_UP" ? "Verify with Passkey" : "Approve"}</button>}</div></div></div>}
+      {intent && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Transaction security check">{verdict ? <div className="verdict-overlay" role="status"><VerdictMark verdict={verdict.kind} /><h2>{verdict.text}</h2></div> : <><div className="card-header"><div><h2>Transaction security check</h2><p>Review exactly what the agent is asking PayPilot to authorize.</p></div><span className={`badge ${intent.decision?.verdict === "BLOCK" ? "badge-danger" : "badge-warn"}`}>{intent.decision?.verdict}</span></div><div className="verify-box"><div className="verify-line"><span>Purpose</span><strong>{intent.purpose}</strong></div><div className="verify-line"><span>Merchant</span><strong>{intent.merchant_name || intent.merchant_domain || "—"}</strong></div><div className="verify-line"><span>Website</span><strong className="mono">{intent.merchant_domain || "—"}</strong></div><div className="verify-line"><span>Amount</span><strong>{money(intent.amount)}</strong></div><div className="verify-line"><span>Destination</span><strong className="mono">{intent.pay_to ? `${intent.pay_to.slice(0, 10)}…${intent.pay_to.slice(-8)}` : "—"}</strong></div><div className="verify-line"><span>City</span><strong>{intent.payload?.city || "—"}</strong></div><div className="verify-line"><span>Risk</span><strong>{intent.decision?.risk ?? 0}/100</strong></div></div>{intent.payload?.resolved_from_context?.length > 0 && <div className="inferred-box" role="alert"><strong>Filled in from earlier in this chat. Check these before approving:</strong><ul>{intent.payload.resolved_from_context.map((r: any, i: number) => <li key={i}><b>{r.field}</b>: {typeof r.value === "number" ? money(r.value) : String(r.value)}</li>)}</ul></div>}{(intent.payload?.dates || intent.payload?.guests) && <div className="verify-box">{intent.payload.dates && <div className="verify-line"><span>Dates</span><strong>{intent.payload.dates}</strong></div>}{intent.payload.guests && <div className="verify-line"><span>Guests</span><strong>{intent.payload.guests}</strong></div>}</div>}<div className="reason-list">{(intent.decision?.reasons || []).map((r: any, i: number) => <div key={i} className={`alert-strip ${r.severity === "block" ? "alert-strip-crit" : r.severity === "step_up" ? "alert-strip-warn" : "alert-strip-ok"}`}>{r.message}</div>)}</div>{intent.decision?.verdict === "BLOCK" && <div className="alert-strip alert-strip-crit">This request cannot be approved by the user. The policy engine has blocked it.</div>}<div className="flex gap-2" style={{ marginTop: 18 }}><button className="btn btn-ghost flex-1" onClick={reject} disabled={busy}>Reject</button>{intent.decision?.verdict !== "BLOCK" && <button className="btn btn-primary flex-1" onClick={approve} disabled={busy}>{busy ? "Verifying…" : intent.decision?.verdict === "STEP_UP" ? "Verify with Passkey" : "Approve"}</button>}</div></>}</div></div>}
     </div>
   );
 }
