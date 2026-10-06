@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import struct
 import time
@@ -52,6 +53,9 @@ def resolve_origin(origin: str) -> str:
 
 def new_challenge(st, purpose: str, ttl: int = 120) -> str:
     """Store a new challenge in state and return its b64url value."""
+    now = time.time()
+    for k in [k for k, c in st.challenges.items() if c["exp"] < now]:      # keep the store from growing forever
+        del st.challenges[k]
     raw = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
     st.challenges[raw] = {"purpose": purpose, "exp": time.time() + ttl}
     return raw
@@ -78,6 +82,8 @@ def verify_registration(st, device_id: str, origin: str, payload: dict, name: st
     client_data_raw = cd.get("clientDataJSON", "")
     attestation_raw = cd.get("attestationObject", "")
     cred_id = payload.get("id", "")
+    if not all(isinstance(v, str) for v in (client_data_raw, attestation_raw, cred_id)) or not 0 < len(cred_id) <= 1024:
+        raise PasskeyError("bad_request", "Malformed passkey data")
 
     client_data, challenge = _parse_client_data(client_data_raw, "webauthn.create", resolve_origin(origin))
     c = st.challenges.pop(challenge, None)
@@ -85,8 +91,14 @@ def verify_registration(st, device_id: str, origin: str, payload: dict, name: st
         raise PasskeyError("bad_challenge", "Challenge expired or not found")
 
     auth_data = _parse_attestation_object(attestation_raw)
+    _need_len(auth_data, 55)
     _check_rp_id(auth_data, origin)
     _check_flags(auth_data, require_uv=True)
+    if cred_id in st.credentials:
+        raise PasskeyError("duplicate_credential", "This passkey is already registered")
+    cid_len = struct.unpack_from(">H", auth_data, 53)[0]
+    if not hmac.compare_digest(b64u(auth_data[55:55 + cid_len]), cred_id):
+        raise PasskeyError("credential_id_mismatch", "Credential id does not match the attested credential")
 
     pub_key_bytes = _extract_cose_key(auth_data)
     sign_count = _auth_data_sign_count(auth_data)
@@ -122,6 +134,8 @@ def verify_assertion(st, origin: str, payload: dict, expected_challenge: str, al
     auth_data_raw = cd.get("authenticatorData", "")
     sig_raw = cd.get("signature", "")
     cred_id = payload.get("id", "")
+    if not all(isinstance(v, str) for v in (client_data_raw, auth_data_raw, sig_raw, cred_id)):
+        raise PasskeyError("bad_request", "Malformed passkey data")
 
     if cred_id not in allowed_ids:
         raise PasskeyError("wrong_credential", "Credential not registered on this device")
@@ -134,7 +148,11 @@ def verify_assertion(st, origin: str, payload: dict, expected_challenge: str, al
     if challenge != expected_challenge:
         raise PasskeyError("bad_challenge", "Challenge mismatch")
 
-    auth_data_bytes = _b64u_decode(auth_data_raw)
+    try:
+        auth_data_bytes = _b64u_decode(auth_data_raw)
+    except Exception:
+        raise PasskeyError("bad_request", "Malformed passkey data")
+    _need_len(auth_data_bytes, 37)
     _check_rp_id_bytes(auth_data_bytes, origin)
     _check_flags_bytes(auth_data_bytes, require_uv=True)
 
@@ -158,11 +176,14 @@ def verify_assertion(st, origin: str, payload: dict, expected_challenge: str, al
 
 
 # ------------------------------------------------------------------ internals
-def _rp_id(origin: str) -> str:
-    # Extract hostname from origin
-    o = resolve_origin(origin)
-    host = o.split("://", 1)[-1].split(":")[0].split("/")[0]
-    return host or config.RP_ID
+def _rp_id(origin: str | None = None) -> str:
+    """The relying-party ID is fixed by configuration, never derived from request input."""
+    return config.RP_ID
+
+
+def _need_len(b: bytes, n: int):
+    if len(b) < n:
+        raise PasskeyError("bad_auth_data", "Authenticator data is too short")
 
 
 def _parse_client_data(raw: str, expected_type: str, expected_origin: str) -> tuple[dict, str]:
@@ -172,10 +193,11 @@ def _parse_client_data(raw: str, expected_type: str, expected_origin: str) -> tu
         raise PasskeyError("bad_client_data", "Cannot parse clientDataJSON")
     if data.get("type") != expected_type:
         raise PasskeyError("bad_type", f"Expected {expected_type}, got {data.get('type')}")
-    if resolve_origin(data.get("origin", "")) != expected_origin:
+    if expected_origin not in config.ORIGINS or resolve_origin(str(data.get("origin", ""))) != expected_origin:
         raise PasskeyError("origin_mismatch",
                            f"Origin mismatch: expected '{expected_origin}', got '{data.get('origin')}'")
-    return data, data.get("challenge", "")
+    ch = data.get("challenge", "")
+    return data, ch if isinstance(ch, str) else ""
 
 
 def _parse_attestation_object(raw: str) -> bytes:
@@ -276,8 +298,9 @@ def _extract_cose_key(auth_data: bytes) -> bytes:
     # Parse it to get x, y coordinates
     try:
         _, cose = _cbor_find_cose(cose_bytes)
-        x = cose.get(-2) or cose.get(b"\xfe")
-        y = cose.get(-3) or cose.get(b"\xfd")
+        if cose.get(3) != -7 or cose.get(1) != 2 or cose.get(-1) != 1:
+            raise PasskeyError("bad_key", "Only ES256 / P-256 passkeys are supported")
+        x, y = cose.get(-2), cose.get(-3)
         if not (isinstance(x, bytes) and isinstance(y, bytes) and len(x) == 32 and len(y) == 32):
             raise PasskeyError("bad_key", "Cannot extract P-256 coordinates from COSE key")
         return x + y  # 64 bytes: x || y
@@ -304,8 +327,6 @@ def _cbor_find_cose(data: bytes) -> tuple[int, dict]:
         raise PasskeyError("bad_cbor", "Unsupported CBOR integer")
 
     def read_neg_int(p):
-        b = data[p]
-        ai = b & 0x1f
         p2, n = read_uint(p)
         return p2, -(n + 1)
 

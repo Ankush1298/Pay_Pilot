@@ -68,6 +68,7 @@ def create_user(username: str, uid: str | None = None) -> str:
 def get_user_by_id(uid: str) -> dict | None: return _users.get(uid)
 
 def new_session(uid: str, device_id: str, ip: str, ua: str) -> tuple[str, str]:
+    purge_expired()
     token = secrets.token_urlsafe(32); sid = "ses_" + secrets.token_hex(8)
     _sessions[token] = {"id": sid, "user_id": uid, "device_id": device_id, "status": "active",
                         "exp": time.time() + config.SESSION_TTL, "ip": ip, "ua": ua[:200], "created": time.time()}
@@ -96,16 +97,35 @@ def device_for_token(token: str | None, uid: str) -> str | None:
     bound_uid, did = v.split(":", 1)
     return did if bound_uid == uid else None
 
-def set_cookies(response: Response, session_token: str, device_token: str | None = None):
-    kw = dict(httponly=True, samesite="lax", path="/")
-    val = f"{session_token}:{device_token or ''}"
-    response.set_cookie(SESSION_COOKIE, val, max_age=365 * 86400, **kw)
+def _is_https(request: Request) -> bool:
+    return (request.headers.get("origin") or "").startswith("https://") or request.url.scheme == "https"
+
+def set_cookies(request: Request, response: Response, session_token: str, device_token: str | None = None):
+    response.set_cookie(SESSION_COOKIE, f"{session_token}:{device_token or ''}", max_age=config.COOKIE_MAX_AGE,
+                        httponly=True, samesite="lax", path="/", secure=_is_https(request))
+
+def device_token_of(request: Request) -> str | None:
+    cookie_val = request.cookies.get(SESSION_COOKIE) or ""
+    return cookie_val.split(":", 1)[1] or None if ":" in cookie_val else None
 
 def clear_session_cookie(request: Request, response: Response):
-    cookie_val = request.cookies.get(SESSION_COOKIE) or ""
-    dtoken = cookie_val.split(":")[1] if ":" in cookie_val else None
+    """Drop the session token but keep the device token, so this browser is still recognised at next login."""
+    dtoken = device_token_of(request)
     if dtoken:
-        kw = dict(httponly=True, samesite="lax", path="/")
-        response.set_cookie(SESSION_COOKIE, f":{dtoken}", max_age=365 * 86400, **kw)
+        response.set_cookie(SESSION_COOKIE, f":{dtoken}", max_age=config.COOKIE_MAX_AGE, httponly=True,
+                            samesite="lax", path="/", secure=_is_https(request))
     else:
-        response.delete_cookie(SESSION_COOKIE)
+        response.delete_cookie(SESSION_COOKIE, path="/")
+
+def revoke_cookie_session(request: Request):
+    """Rotation: signing in again ends the session this browser was holding."""
+    tok = (request.cookies.get(SESSION_COOKIE) or "").split(":")[0]
+    if tok in _sessions:
+        _sessions[tok]["status"] = "revoked"
+
+def purge_expired():
+    now = time.time()
+    for t in [t for t, s in _sessions.items() if s["exp"] < now or s["status"] != "active"]:
+        _sessions.pop(t, None)
+    for k in [k for k, c in AUTH_STATE.challenges.items() if c["exp"] < now]:
+        AUTH_STATE.challenges.pop(k, None)

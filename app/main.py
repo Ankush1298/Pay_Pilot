@@ -1,10 +1,15 @@
 """PayPilot API. Run:  uvicorn app.main:app --port 8000   (the Next.js app proxies /api to it)"""
 from __future__ import annotations
 
+import json
+import secrets
 import time
+from typing import Annotated
+from urllib.parse import quote
+
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 from . import auth, config, lab as LAB
 from . import merchants as M
@@ -14,9 +19,18 @@ from .auth import Auth
 from .gateway import GatewayError
 from .ledger import Ledger
 from .registry import REG
-from .state import State
+from .policy import valid_policy_change
+from .state import DEFAULT_POLICY, State
 
 app = FastAPI(title="PayPilot API", version="2.0.0", docs_url=None, redoc_url=None)
+log = config.log
+
+
+@app.exception_handler(Exception)
+async def unhandled(request: Request, exc: Exception):
+    """Log the stack trace server-side; never return it."""
+    log.exception("unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse({"detail": {"code": "internal_error", "message": "Something went wrong"}}, 500)
 
 
 # --------------------------------------------------------------- middleware
@@ -38,7 +52,16 @@ async def security(request: Request, call_next):
 
 
 def origin_of(request: Request) -> str:
-    return request.headers.get("origin") or config.ORIGINS[0]
+    origin = (request.headers.get("origin") or config.ORIGINS[0]).rstrip("/")
+    if origin not in config.ORIGINS:
+        raise auth.AuthError(403, "bad_origin", "Origin not allowed")
+    return origin
+
+
+def limit(key: str, n: int, window: int):
+    if not auth.LIMITER.allow(key, n, window):
+        raise auth.AuthError(429, "rate_limited", "Too many attempts. Slow down and try again shortly.",
+                             headers={"Retry-After": str(window)})
 
 
 def run(a: Auth, fn, *args, **kw):
@@ -61,15 +84,24 @@ def ua_label(ua: str) -> str:
 
 
 # ------------------------------------------------------------------- models
+def _small(d: dict) -> dict:
+    if len(json.dumps(d)) > 20_000:
+        raise ValueError("payload too large")
+    return d
+
+
+Cred = Annotated[dict, AfterValidator(_small)]      # WebAuthn responses are ~1 KB; refuse anything huge
+
+
 class RegisterOptionsReq(BaseModel):
     username: str = Field(max_length=40)
 
 class LoginVerifyReq(BaseModel):
-    credential: dict
+    credential: Cred
     device_name: str | None = Field(default=None, max_length=40)
 
 class RegisterVerifyReq(BaseModel):
-    credential: dict
+    credential: Cred
     device_name: str | None = Field(default=None, max_length=40)
     policy: dict | None = None
 
@@ -79,38 +111,36 @@ class ChatReq(BaseModel):
 
 
 class PrepareReq(BaseModel):
-    option_id: str
+    option_id: str = Field(max_length=40)
 
 
 class CredReq(BaseModel):
-    credential: dict
+    credential: Cred
 
 
 class PasskeyReq(BaseModel):
-    credential: dict
+    credential: Cred
     name: str = Field(default="", max_length=40)
 
 
 class PolicyReq(BaseModel):
-    policy: dict
+    policy: Annotated[dict, AfterValidator(_small)]
 
 
 class ManageReq(BaseModel):
-    units: int | None = None
+    units: int | None = Field(default=None, ge=1, le=30)
 
 
 class LabReq(BaseModel):
-    scenario: str
+    scenario: str = Field(max_length=40)
 
 
 # --------------------------------------------------------------------- passkey-only auth
 @app.post("/api/auth/register/options")
 def register_options(req: RegisterOptionsReq, request: Request):
-    ip = auth.client_ip(request)
-    if not auth.LIMITER.allow(f"reg:{ip}", 10, 3600):
-        raise auth.AuthError(429, "rate_limited", "Too many sign-ups from this network. Try later.")
-    name = (req.username or "").strip()[:40] or f"User {__import__('secrets').token_hex(3)}"
-    user_id = "u_" + __import__("secrets").token_hex(16)
+    limit(f"reg:{auth.client_ip(request)}", 10, 3600)
+    name = (req.username or "").strip()[:40] or f"User {secrets.token_hex(3)}"
+    user_id = "u_" + secrets.token_hex(16)
     opts = PK.registration_options(auth.AUTH_STATE, user_id, name, origin_of(request))
     challenge = opts["challenge"]
     auth.AUTH_STATE.challenges[challenge]["username"] = name
@@ -120,6 +150,9 @@ def register_options(req: RegisterOptionsReq, request: Request):
 @app.post("/api/auth/register/verify")
 def register_verify(req: RegisterVerifyReq, request: Request, response: Response):
     origin = origin_of(request); ip, ua = auth.client_ip(request), request.headers.get("user-agent", "")
+    limit(f"regv:{ip}", 20, 3600)
+    if req.policy is not None and not valid_policy_change(req.policy, DEFAULT_POLICY["absolute_cap"]):
+        raise HTTPException(422, {"code": "invalid_policy", "message": "Those policy values are not valid"})
     cd = req.credential.get("response", {})
     try:
         _, challenge = PK._parse_client_data(cd.get("clientDataJSON", ""), "webauthn.create", PK.resolve_origin(origin))
@@ -144,26 +177,26 @@ def register_verify(req: RegisterVerifyReq, request: Request, response: Response
         # In live mode this also deploys the deterministic smart account owned by this P-256 key.
         try:
             gw.initialize_wallet(cred)
-        except Exception as e:
+        except Exception:
             # Do not leave an account claiming to be on-chain when deployment is unavailable.
+            log.exception("smart-account setup failed")
             auth._users.pop(user_id, None); auth._usernames.pop(username.lower(), None)
-            raise auth.AuthError(503, "wallet_setup_failed", f"Smart-account setup failed: {e}")
+            raise auth.AuthError(503, "wallet_setup_failed", "Smart-account setup failed")
         dtoken = auth.bind_device(user_id, dev["id"]); token, sid = auth.new_session(user_id, dev["id"], ip, ua)
         gw.ensure_session(sid, dev["id"]); gw.st.onboarding_open = False; gw.st.log("account", "Account created with a discoverable passkey", "ok")
-    auth.set_cookies(response, token, dtoken)
+    auth.set_cookies(request, response, token, dtoken)
     return {"user": {"id": user_id, "username": username}, "device": dev, "wallet_address": gw.wallet}
 
 @app.post("/api/auth/login/options")
 def login_options(request: Request):
-    ip = auth.client_ip(request)
-    if not auth.LIMITER.allow(f"login:{ip}", 30, 300):
-        raise auth.AuthError(429, "rate_limited", "Too many attempts from this network.", headers={"Retry-After": "300"})
+    limit(f"login:{auth.client_ip(request)}", 30, 300)
     challenge = PK.new_challenge(auth.AUTH_STATE, "login")
     return {"challenge": challenge, "rpId": PK._rp_id(origin_of(request)), "userVerification": "required", "timeout": 120_000}
 
 @app.post("/api/auth/login/verify")
 def login_verify(req: LoginVerifyReq, request: Request, response: Response):
     origin = origin_of(request); ip, ua = auth.client_ip(request), request.headers.get("user-agent", "")
+    limit(f"loginv:{ip}", 20, 300)
     cd = req.credential.get("response", {})
     try:
         _, challenge = PK._parse_client_data(cd.get("clientDataJSON", ""), "webauthn.get", PK.resolve_origin(origin))
@@ -182,8 +215,7 @@ def login_verify(req: LoginVerifyReq, request: Request, response: Response):
     with REG.use(user_id) as gw:
         try: PK.verify_assertion(gw.st, origin, req.credential, challenge, list(gw.st.credentials.keys()))
         except PK.PasskeyError as e: raise auth.AuthError(401, e.code, e.message)
-        cookie_val = request.cookies.get(auth.SESSION_COOKIE) or ""
-        dtoken = cookie_val.split(":")[1] if ":" in cookie_val else None
+        dtoken = auth.device_token_of(request)
         cookie_device = auth.device_for_token(dtoken, user_id)
         dev = gw.st.devices.get(cookie_device) if cookie_device else None
         if dev and dev["status"] == "blocked":
@@ -191,10 +223,11 @@ def login_verify(req: LoginVerifyReq, request: Request, response: Response):
         if not dev:
             dev = gw.add_device(req.device_name or ua_label(ua), ua, ip, trusted=False)
         dtoken = auth.bind_device(user_id, dev["id"])
+        auth.revoke_cookie_session(request)                      # rotate: a new login ends the old session
         token, sid = auth.new_session(user_id, dev["id"], ip, ua)
         gw.ensure_session(sid, dev["id"])
         gw.st.log("session", f"Signed in with discoverable passkey from {ip}", "info")
-    auth.set_cookies(response, token, dtoken)
+    auth.set_cookies(request, response, token, dtoken)
     return {"user": {"id": user_id, "username": user["username"]}, "device": dev, "new_device": dev["status"] != "trusted"}
 
 @app.post("/api/auth/logout")
@@ -205,9 +238,9 @@ def logout(request: Request, response: Response, a: Auth = Depends(auth.require)
 
 
 @app.post("/api/auth/logout-all")
-def logout_all(response: Response, a: Auth = Depends(auth.require)):
+def logout_all(request: Request, response: Response, a: Auth = Depends(auth.require)):
     auth.revoke_user_sessions(a.user_id)
-    auth.clear_session_cookie(response)
+    auth.clear_session_cookie(request, response)
     return {"ok": True}
 
 
@@ -293,18 +326,20 @@ def agent_prepare(req: PrepareReq, a: Auth = Depends(auth.require)):
 @app.post("/api/agent/bookings/{booking_id}/{action}")
 def agent_manage(booking_id: str, action: str, req: ManageReq, a: Auth = Depends(auth.require)):
     if action not in {"cancel", "modify"}:
-        raise HTTPException(404, "unknown action")
+        raise HTTPException(404, {"code": "unknown_action", "message": "Unknown action"})
     return run(a, lambda gw, s: AGENT.manage_booking(gw, s, action, booking_id, req.units))
 
 
 # ---------------------------------------------------------------- approvals
 @app.post("/api/intents/{intent_id}/approval-options")
 def approval_options(intent_id: str, request: Request, a: Auth = Depends(auth.require)):
+    limit(f"appr:{a.user_id}", 30, 300)
     return run(a, lambda gw, s: gw.approval_options(s, intent_id, origin_of(request)))
 
 
 @app.post("/api/intents/{intent_id}/approve")
 def approve(intent_id: str, req: CredReq, request: Request, a: Auth = Depends(auth.require)):
+    limit(f"appr:{a.user_id}", 30, 300)
     return run(a, lambda gw, s: gw.approve(s, intent_id, origin_of(request), req.credential))
 
 
@@ -367,11 +402,13 @@ def merchant_authorize(domain: str, state: str = ""):
 
 
 @app.post("/merchant/{domain}/authorize")
-def merchant_authorize_post(domain: str, member: str = Form(""), password: str = Form(""), state: str = Form("")):
+def merchant_authorize_post(domain: str, request: Request, member: str = Form("", max_length=60),
+                            password: str = Form("", max_length=100), state: str = Form("", max_length=100)):
+    limit(f"merch:{auth.client_ip(request)}", 20, 300)
     code = M.issue_code(domain, member, password, state)     # the password never leaves this function
     if not code:
         return HTMLResponse(M.authorize_page(domain, state).replace("<h1>", "<p style='color:#b4231b'>Check your credentials.</p><h1>", 1), 401)
-    return RedirectResponse(f"/api/connections/callback?domain={domain}&state={state}&code={code}", 303)
+    return RedirectResponse(f"/api/connections/callback?domain={quote(domain)}&state={quote(state)}&code={code}", 303)
 
 
 @app.get("/api/health")
@@ -379,4 +416,4 @@ def health():
     return {"ok": True, "ledger": Ledger.network}
 
 
-print(f"[PayPilot] ledger mode: {Ledger.network}  (expected 'simulated' for the demo)")
+log.info("ledger mode: %s (expected 'simulated' for the demo)", Ledger.network)

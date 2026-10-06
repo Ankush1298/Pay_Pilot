@@ -9,3 +9,9 @@ from app.main import app
 @pytest.fixture()
 def client():
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    from app import auth
+    auth.LIMITER._hits.clear()
