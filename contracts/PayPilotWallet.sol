@@ -7,11 +7,11 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
 import {WebAuthn} from "@openzeppelin/contracts/utils/cryptography/WebAuthn.sol";
 
-/// @title IntentLockWallet
+/// @title PayPilotWallet
 /// @notice A non-ERC-4337 smart account whose owner is one or more P-256/WebAuthn passkeys.
 ///         The relayer can submit transactions, but cannot move funds without the service
 ///         policy signature; STEP_UP transactions additionally require a valid WebAuthn assertion.
-contract IntentLockWallet {
+contract PayPilotWallet {
     using ECDSA for bytes32;
 
     address public policySigner;
@@ -135,7 +135,7 @@ contract IntentLockWallet {
     }
 
     function hashPolicy(uint256 newPerTxLimit, uint256 newDailyLimit) public view returns (bytes32) {
-        return keccak256(abi.encode(block.chainid, address(this), newPerTxLimit, newDailyLimit, keccak256("IntentLock policy")));
+        return keccak256(abi.encode(block.chainid, address(this), newPerTxLimit, newDailyLimit, keccak256("PayPilot policy")));
     }
 
     function setPolicy(
@@ -167,11 +167,11 @@ contract IntentLockWallet {
     }
 }
 
-contract IntentLockFactory {
+contract PayPilotFactory {
     address public immutable implementation;
     event WalletCreated(address indexed wallet, bytes32 indexed keyId);
 
-    constructor() { implementation = address(new IntentLockWallet()); }
+    constructor() { implementation = address(new PayPilotWallet()); }
 
     function saltFor(uint256 x, uint256 y) public pure returns (bytes32) {
         return keccak256(abi.encode(x, y));
@@ -194,7 +194,7 @@ contract IntentLockFactory {
         wallet = Clones.predictDeterministicAddress(implementation, salt, address(this));
         if (wallet.code.length == 0) {
             wallet = Clones.cloneDeterministic(implementation, salt);
-            IntentLockWallet(payable(wallet)).initialize(keyId, x, y, policySigner, perTxLimit, dailyLimit, trustedMerchants);
+            PayPilotWallet(payable(wallet)).initialize(keyId, x, y, policySigner, perTxLimit, dailyLimit, trustedMerchants);
             emit WalletCreated(wallet, keyId);
         }
     }

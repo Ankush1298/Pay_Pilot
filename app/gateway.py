@@ -1,4 +1,4 @@
-"""IntentLock gateway (one instance per user): the only path between the AI and the user's money.
+"""PayPilot gateway (one instance per user): the only path between the AI and the user's money.
 
 Lifecycle of an intent
   submit -> policy.evaluate -> BLOCK (stop) | STEP_UP (wait for a passkey assertion) | ALLOW

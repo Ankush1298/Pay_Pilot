@@ -1,6 +1,6 @@
 """Minimal WebAuthn (passkey) helpers.
 
-This implements just what IntentLock needs:
+This implements just what PayPilot needs:
   - Registration: options + verify (CBOR-free subset that browsers support)
   - Authentication (assertion): options + verify
 

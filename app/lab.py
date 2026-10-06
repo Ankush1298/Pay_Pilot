@@ -77,41 +77,48 @@ def run(gw: Gateway, real_sess: dict, user_id: str, scenario: str) -> dict:
                           "code": e.code, "message": e.message})
             return None
 
+    def with_intent(fn):
+        lab["active_user_intent"] = {"kind": "hotel", "budget": 10000, "set_at": gw.st.now()} # Use lab session dict if it holds it? Wait, st holds it!
+        # Actually, st.active_user_intent is global to the state.
+        # Let's just set it on gw.st.
+        gw.st.active_user_intent = {"kind": "hotel", "budget": 10000, "set_at": gw.st.now()}
+        return fn()
+
     if scenario == "auto_approve":
         it = step("Agent submits ₹800 hotel booking",
-                  lambda: gw.submit_intent(lab, origin="agent", type="hotel",
+                  lambda: with_intent(lambda: gw.submit_intent(lab, origin="agent", type="hotel",
                                            merchant_domain="grandstay.mock",
                                            pay_to=M.addr("grandstay"), amount=800,
                                            purpose="Pink City Residency (1 night, Jaipur)",
                                            payload={"title": "Pink City Residency", "city": "Jaipur",
                                                     "units": 1, "unit_price": 800, "unit_label": "night"},
-                                           lab=True))
+                                           lab=True)))
         if it:
             steps.append({"label": "Policy verdict", "status": "ok",
                           "result": {"verdict": it["decision"]["verdict"], "reasons": it["decision"]["reasons"]}})
 
     elif scenario == "step_up":
         it = step("Agent submits ₹2,400 luxury hotel",
-                  lambda: gw.submit_intent(lab, origin="agent", type="hotel",
+                  lambda: with_intent(lambda: gw.submit_intent(lab, origin="agent", type="hotel",
                                            merchant_domain="royalpalace.mock",
                                            pay_to=M.addr("royalpalace"), amount=2400,
                                            purpose="Maharaja Suites (1 night, Jaipur)",
                                            payload={"title": "Maharaja Suites", "city": "Jaipur",
                                                     "units": 1, "unit_price": 2400, "unit_label": "night"},
-                                           lab=True))
+                                           lab=True)))
         if it:
             steps.append({"label": "Policy verdict", "status": "step_up",
                           "result": {"verdict": it["decision"]["verdict"], "reasons": it["decision"]["reasons"]}})
 
     elif scenario == "compromised_ai":
         step("Compromised agent submits payment to attacker's address",
-             lambda: gw.submit_intent(lab, origin="agent", type="hotel",
+             lambda: with_intent(lambda: gw.submit_intent(lab, origin="agent", type="hotel",
                                       merchant_domain="lucky-stays.example",
                                       pay_to=M.ATTACKER_ADDR, amount=499,
                                       purpose="Amber Fort View (1 night, Jaipur)",
                                       payload={"title": "Amber Fort View", "city": "Jaipur",
                                                "units": 1, "unit_price": 499, "unit_label": "night"},
-                                      lab=True))
+                                      context={"injection_suspected": True}, lab=True)))
 
     elif scenario == "new_device":
         # Show what the policy does for a pending device
@@ -120,38 +127,38 @@ def run(gw: Gateway, real_sess: dict, user_id: str, scenario: str) -> dict:
         nd_sess = gw.ensure_session(nd_sid, nd["id"])
         nd_sess["lab"] = True
         step("New device tries to book a hotel",
-             lambda: gw.submit_intent(nd_sess, origin="agent", type="hotel",
+             lambda: with_intent(lambda: gw.submit_intent(nd_sess, origin="agent", type="hotel",
                                       merchant_domain="grandstay.mock",
                                       pay_to=M.addr("grandstay"), amount=800,
                                       purpose="Connaught Central (1 night, Delhi)",
-                                      lab=True))
+                                      lab=True)))
         steps.append({"label": "Device status", "status": "info",
                       "result": {"device": nd, "message": "Payments locked for 24 h until owner approves"}})
 
     elif scenario == "lookalike":
         step("Agent submits booking to lookalike domain 'grandstay-hotels.mock'",
-             lambda: gw.submit_intent(lab, origin="agent", type="hotel",
+             lambda: with_intent(lambda: gw.submit_intent(lab, origin="agent", type="hotel",
                                       merchant_domain="grandstay-hotels.mock",
                                       pay_to=M.addr("grandstay-hotels"), amount=800,
                                       purpose="Fake hotel on lookalike domain",
-                                      lab=True))
+                                      lab=True)))
 
     elif scenario == "daily_limit":
         # Two bookings to push near the limit, then a third that triggers step-up
         for i, (title, amount) in enumerate([("Booking 1", 2200), ("Booking 2", 2200), ("Booking 3 – triggers daily limit", 1000)], 1):
             step(f"Payment {i}: {title} (₹{amount})",
-                 lambda a=amount, t=title: gw.submit_intent(lab, origin="agent", type="hotel",
+                 lambda a=amount, t=title: with_intent(lambda: gw.submit_intent(lab, origin="agent", type="hotel",
                                                              merchant_domain="grandstay.mock",
                                                              pay_to=M.addr("grandstay"), amount=a,
-                                                             purpose=f"{t} (1 night)", lab=True))
+                                                             purpose=f"{t} (1 night)", lab=True)))
 
     elif scenario == "velocity":
         for i in range(1, 5):
             step(f"Payment {i}: quick ₹800 booking",
-                 lambda: gw.submit_intent(lab, origin="agent", type="hotel",
+                 lambda: with_intent(lambda: gw.submit_intent(lab, origin="agent", type="hotel",
                                           merchant_domain="cityinn.mock",
                                           pay_to=M.addr("cityinn"), amount=800,
-                                          purpose="Rajputana Lodge (1 night, Jaipur)", lab=True))
+                                          purpose="Rajputana Lodge (1 night, Jaipur)", lab=True)))
 
     title, story = SCENARIOS[scenario]
     return {"scenario": scenario, "title": title, "story": story, "steps": steps}

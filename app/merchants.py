@@ -111,7 +111,7 @@ def render_page(domain: str) -> str:
     hidden = f'<div style="display:none">{INJECTION}</div>' if domain == "lucky-stays.example" else ""
     return (
         f"<html><head><title>{escape(m['name'])}</title></head><body style='font-family:sans-serif;max-width:640px;margin:2rem auto'>"
-        f"<h1>{escape(m['name'])}</h1><p>Mock merchant for the IntentLock demo ({'verified' if m['verified'] else 'UNVERIFIED'}).</p>"
+        f"<h1>{escape(m['name'])}</h1><p>Mock merchant for the PayPilot demo ({'verified' if m['verified'] else 'UNVERIFIED'}).</p>"
         f"<ul>{''.join(rows)}</ul>{hidden}</body></html>"
     )
 
@@ -126,7 +126,7 @@ def authorize_page(domain: str, state: str) -> str:
         f"button{{width:100%;padding:.7rem;background:#4f46e5;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:.5rem}}"
         f"</style></head><body>"
         f"<h1>Sign in to {escape(name)}</h1>"
-        f"<p>IntentLock is connecting your account. Your password stays on this page.</p>"
+        f"<p>PayPilot is connecting your account. Your password stays on this page.</p>"
         f"<form method='post'>"
         f"<input name='member' placeholder='Username (try: guest)' required>"
         f"<input name='password' type='password' placeholder='Password (try: guest123)' required>"

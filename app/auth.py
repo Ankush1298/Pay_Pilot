@@ -2,7 +2,7 @@
 
 There are no passwords, password hashes, or recovery codes here. A discoverable
 WebAuthn credential is the account authenticator. A separate httpOnly device
-cookie lets IntentLock distinguish an already-trusted browser from a new one.
+cookie lets PayPilot distinguish an already-trusted browser from a new one.
 """
 from __future__ import annotations
 
@@ -45,7 +45,9 @@ class Auth:
         self.user_id, self.username, self.session_id, self.device_id = user_id, username, session_id, device_id
 
 def require(request: Request) -> Auth:
-    token = request.cookies.get(SESSION_COOKIE)
+    cookie_val = request.cookies.get(SESSION_COOKIE)
+    if not cookie_val: raise AuthError(401, "no_token", "Sign in with your passkey to continue")
+    token = cookie_val.split(":")[0]
     if not token: raise AuthError(401, "no_token", "Sign in with your passkey to continue")
     sess = _sessions.get(token)
     if not sess or sess["exp"] < time.time() or sess["status"] != "active":
@@ -96,7 +98,14 @@ def device_for_token(token: str | None, uid: str) -> str | None:
 
 def set_cookies(response: Response, session_token: str, device_token: str | None = None):
     kw = dict(httponly=True, samesite="lax", path="/")
-    response.set_cookie(SESSION_COOKIE, session_token, max_age=config.SESSION_TTL, **kw)
-    if device_token: response.set_cookie(DEVICE_COOKIE, device_token, max_age=365 * 86400, **kw)
+    val = f"{session_token}:{device_token or ''}"
+    response.set_cookie(SESSION_COOKIE, val, max_age=365 * 86400, **kw)
 
-def clear_session_cookie(response: Response): response.delete_cookie(SESSION_COOKIE)
+def clear_session_cookie(request: Request, response: Response):
+    cookie_val = request.cookies.get(SESSION_COOKIE) or ""
+    dtoken = cookie_val.split(":")[1] if ":" in cookie_val else None
+    if dtoken:
+        kw = dict(httponly=True, samesite="lax", path="/")
+        response.set_cookie(SESSION_COOKIE, f":{dtoken}", max_age=365 * 86400, **kw)
+    else:
+        response.delete_cookie(SESSION_COOKIE)

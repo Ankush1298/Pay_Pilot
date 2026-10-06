@@ -3,11 +3,11 @@ import { ClientProviders } from "./ClientProviders";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "IntentLock — AI Payment Security",
+  title: "PayPilot — AI Payment Security",
   description:
     "The AI proposes. The policy decides. You approve. Secure AI transaction layer with passkey verification.",
   openGraph: {
-    title: "IntentLock",
+    title: "PayPilot",
     description: "Secure AI payment layer with policy-engine enforcement and passkey approvals.",
     type: "website",
   },

@@ -1,12 +1,12 @@
 import { api } from "./api";
 
 // Base64Url to Uint8Array
-function b64uDec(s: string): Uint8Array {
+function b64uDec(s: string): BufferSource {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
   const bin = atob(b64);
   const arr = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return arr;
+  return arr as unknown as BufferSource;
 }
 
 // Uint8Array to Base64Url

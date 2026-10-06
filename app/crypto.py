@@ -1,4 +1,4 @@
-"""Cryptographic helpers for IntentLock.
+"""Cryptographic helpers for PayPilot.
 
 * Intents are hashed over a canonical JSON encoding, so a signature binds
   merchant + amount + purpose + expiry + nonce (the *exact* transaction).

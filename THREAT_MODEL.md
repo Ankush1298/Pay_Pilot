@@ -1,4 +1,4 @@
-# IntentLock threat model
+# PayPilot threat model
 
 ## Security boundary
 

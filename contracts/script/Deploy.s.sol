@@ -2,15 +2,15 @@
 pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {IntentLockFactory} from "../IntentLockWallet.sol";
+import {PayPilotFactory} from "../PayPilotWallet.sol";
 
 contract Deploy is Script {
-    function run() external returns (IntentLockFactory factory) {
+    function run() external returns (PayPilotFactory factory) {
         uint256 deployer = vm.envUint("DEPLOYER_PRIVATE_KEY");
         vm.startBroadcast(deployer);
-        factory = new IntentLockFactory();
+        factory = new PayPilotFactory();
         vm.stopBroadcast();
-        console2.log("IntentLockFactory", address(factory));
-        console2.log("IntentLockWallet implementation", factory.implementation());
+        console2.log("PayPilotFactory", address(factory));
+        console2.log("PayPilotWallet implementation", factory.implementation());
     }
 }

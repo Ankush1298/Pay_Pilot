@@ -21,7 +21,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="layout">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <h2>IntentLock</h2>
+          <h2>PayPilot</h2>
           <p>Secure Agentic Payments</p>
         </div>
         <nav className="flex-col gap-1" style={{ padding: "0 0.5rem" }}>

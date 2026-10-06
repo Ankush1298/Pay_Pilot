@@ -1,7 +1,7 @@
 """Ledger.
 
 Default: a SIMULATED in-memory ledger (no network, no tokens, no deployment). Transaction hashes are
-fake and have no explorer link. Optional live mode (INTENTLOCK_LEDGER=live) settles on Monad testnet
+fake and have no explorer link. Optional live mode (PAYPILOT_LEDGER=live) settles on Monad testnet
 through the smart account in contracts/; it needs a deployed factory, a funded relayer and keys.
 In live mode the relayer pays gas but never owns the user's smart-account funds.
 """
@@ -53,9 +53,9 @@ else:
     RPC_URL = config.RPC_URL
     EXPLORER_URL = config.EXPLORER_URL
     DEPLOYMENTS = _load_deployments()
-    FACTORY = DEPLOYMENTS.get("IntentLockFactory")
+    FACTORY = DEPLOYMENTS.get("PayPilotFactory")
     if not FACTORY or not config.RELAYER_KEY or not config.POLICY_SIGNER_KEY:
-        raise RuntimeError("Live Monad mode is not configured. Set INTENTLOCK_RELAYER_KEY, INTENTLOCK_POLICY_SIGNER_KEY and deploy IntentLockFactory first.")
+        raise RuntimeError("Live Monad mode is not configured. Set PAYPILOT_RELAYER_KEY, PAYPILOT_POLICY_SIGNER_KEY and deploy PayPilotFactory first.")
 
     w3 = Web3(Web3.HTTPProvider(RPC_URL))
     relayer = Account.from_key(config.RELAYER_KEY)

@@ -1,8 +1,8 @@
-# IntentLock
+# PayPilot
 
 **The AI proposes. The policy decides. Your passkey approves.**
 
-IntentLock is a security gateway for autonomous AI actions. The AI can search merchant sites, compare
+PayPilot is a security gateway for autonomous AI actions. The AI can search merchant sites, compare
 prices and reviews, fill a booking and prepare payment, but it cannot redefine the user's intent or
 authenticate as the user. Accounts are **passkey-only** (WebAuthn, ECDSA P-256): no password, no seed
 phrase, no recovery codes.
@@ -18,14 +18,14 @@ Two terminals.
 # Terminal 1: backend (FastAPI)
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 # Terminal 2: frontend (Next.js)
 cd frontend && npm install && npm run dev      # http://localhost:3000
 ```
 
 `./run.sh` does both. Open <http://localhost:3000>. Use `localhost` (WebAuthn needs a secure context
-and the relying-party ID defaults to `localhost`; override with `INTENTLOCK_RP_ID`). You need a browser
+and the relying-party ID defaults to `localhost`; override with `PAYPILOT_RP_ID`). You need a browser
 and device that support passkeys (Touch ID, Windows Hello, Android, or a security key).
 
 Tests: `python -m pytest -q`.
@@ -69,11 +69,11 @@ Challenges are random (`secrets.token_bytes(32)`), single-use and expire after 1
 | Policy engine, intent binding, devices, strikes, audit log | **Real** |
 | Merchants, websites, prompt-injection fixtures, the agent's "intelligence" | **Simulated** (rule-based demo fixtures) |
 | Ledger | **Simulated by default**: in-memory, fake transaction ids, no explorer links, no funds |
-| Smart-account contract (`contracts/IntentLockWallet.sol`) | **Reference code, not deployed.** See below |
+| Smart-account contract (`contracts/PayPilotWallet.sol`) | **Reference code, not deployed.** See below |
 
 ## Smart-account reference design (optional, not deployed)
 
-`contracts/IntentLockWallet.sol` is a non-ERC-4337 smart account owned by P-256/WebAuthn public keys,
+`contracts/PayPilotWallet.sol` is a non-ERC-4337 smart account owned by P-256/WebAuthn public keys,
 created by a CREATE2/Clones factory from the key's coordinates. The policy service signs every payment
 (ECDSA); `STEP_UP` payments also need a WebAuthn assertion verified on-chain with a WebAuthn library
 (P-256 via the native verifier at `0x100` where available, EIP-7951, with a Solidity fallback).
@@ -90,9 +90,9 @@ Status, honestly:
 
 ### Optional: live Monad testnet mode
 
-Not needed for the demo. If you want to try it: `INTENTLOCK_LEDGER=live`, `pip install -r
+Not needed for the demo. If you want to try it: `PAYPILOT_LEDGER=live`, `pip install -r
 requirements-live.txt`, install the contract dependencies with Foundry, deploy the factory, record the
-addresses in `deployments.json`, and set `INTENTLOCK_RELAYER_KEY` and `INTENTLOCK_POLICY_SIGNER_KEY`
+addresses in `deployments.json`, and set `PAYPILOT_RELAYER_KEY` and `PAYPILOT_POLICY_SIGNER_KEY`
 (see `.env.example`). Both keys' accounts need testnet MON for gas. Monad's testnet details are in the
 official docs: <https://docs.monad.xyz/developer-essentials/testnets>. Live mode is untested end to end.
 
@@ -100,11 +100,11 @@ official docs: <https://docs.monad.xyz/developer-essentials/testnets>. Live mode
 
 * State is in memory; restarting the server resets everything.
 * Attestation is `none`: we verify the key and signatures, not the authenticator model.
-* The OS passkey prompt cannot show transaction details; IntentLock's own dialog renders them from the
+* The OS passkey prompt cannot show transaction details; PayPilot's own dialog renders them from the
   server's record, and the signature binds to the same digest.
 * The WebAuthn CBOR parser is a minimal subset for `none` attestation. Use a vetted library in production.
 * Single relying party (`localhost` by default); rate limiting is in-process per IP.
-* The master key has a development default unless `INTENTLOCK_MASTER_KEY` is set.
+* The master key has a development default unless `PAYPILOT_MASTER_KEY` is set.
 * The injection scanner is a heuristic; the real defense is that policy ignores what the AI believes.
 * Not audited. Do not use real funds.
 

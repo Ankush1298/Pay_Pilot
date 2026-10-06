@@ -5,8 +5,8 @@
   "explorer": "https://testnet.monadvision.com",
   "faucet": "https://faucet.monad.xyz",
   "deployed": false,
-  "IntentLockFactory": null,
-  "IntentLockWalletImpl": null,
+  "PayPilotFactory": null,
+  "PayPilotWalletImpl": null,
   "deployedAt": null,
   "deploymentTx": null
 }

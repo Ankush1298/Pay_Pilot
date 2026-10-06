@@ -36,7 +36,7 @@ export default function AuthPage() {
     setBusy(true);
     try {
       const ceiling = Math.max(0, Math.min(25000, Number(limit) || 1500));
-      await signupPasskey(displayName || "IntentLock user", { per_tx_limit: ceiling, daily_limit: Math.max(ceiling * 3, 5000) });
+      await signupPasskey(displayName || "PayPilot user", { per_tx_limit: ceiling, daily_limit: Math.max(ceiling * 3, 5000) });
       await checkAuth();
       show("ok", "Account created successfully with Passkey.");
     } catch (err: any) {
@@ -63,7 +63,7 @@ export default function AuthPage() {
     <div className="flex items-center justify-center" style={{ minHeight: "100vh", padding: "2rem" }}>
       <div className="card card-glass animate-fade-up" style={{ width: "100%", maxWidth: "400px" }}>
         <div className="text-center" style={{ marginBottom: "2rem" }}>
-          <h1 style={{ marginBottom: "0.5rem" }}>IntentLock</h1>
+          <h1 style={{ marginBottom: "0.5rem" }}>PayPilot</h1>
           <p>Passkey-only authorization for AI actions</p>
         </div>
         

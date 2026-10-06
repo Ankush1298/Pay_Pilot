@@ -702,7 +702,7 @@ code, pre {
 .empty-state p { font-size: 0.875rem; max-width: 280px; }
 
 
-/* ---------- IntentLock product dashboard ---------- */
+/* ---------- PayPilot product dashboard ---------- */
 .eyebrow { font-size: .68rem; letter-spacing: .12em; font-weight: 700; color: var(--accent); margin-bottom: .35rem; }
 .page-header-wide { display:flex; justify-content:space-between; gap:1rem; align-items:flex-end; }
 .header-statuses { display:flex; gap:.5rem; flex-wrap:wrap; justify-content:flex-end; }

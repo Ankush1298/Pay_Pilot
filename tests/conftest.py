@@ -1,6 +1,6 @@
 import os
-os.environ.setdefault("INTENTLOCK_TEST_MODE", "1")
-os.environ.setdefault("INTENTLOCK_LEDGER", "simulated")
+os.environ.setdefault("PAYPILOT_TEST_MODE", "1")
+os.environ.setdefault("PAYPILOT_LEDGER", "simulated")
 
 import pytest
 from fastapi.testclient import TestClient

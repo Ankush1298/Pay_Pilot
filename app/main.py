@@ -1,4 +1,4 @@
-"""IntentLock API. Run:  uvicorn app.main:app --port 8000   (the Next.js app proxies /api to it)"""
+"""PayPilot API. Run:  uvicorn app.main:app --port 8000   (the Next.js app proxies /api to it)"""
 from __future__ import annotations
 
 import time
@@ -16,7 +16,7 @@ from .ledger import Ledger
 from .registry import REG
 from .state import State
 
-app = FastAPI(title="IntentLock API", version="2.0.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="PayPilot API", version="2.0.0", docs_url=None, redoc_url=None)
 
 
 # --------------------------------------------------------------- middleware
@@ -182,7 +182,9 @@ def login_verify(req: LoginVerifyReq, request: Request, response: Response):
     with REG.use(user_id) as gw:
         try: PK.verify_assertion(gw.st, origin, req.credential, challenge, list(gw.st.credentials.keys()))
         except PK.PasskeyError as e: raise auth.AuthError(401, e.code, e.message)
-        cookie_device = auth.device_for_token(request.cookies.get(auth.DEVICE_COOKIE), user_id)
+        cookie_val = request.cookies.get(auth.SESSION_COOKIE) or ""
+        dtoken = cookie_val.split(":")[1] if ":" in cookie_val else None
+        cookie_device = auth.device_for_token(dtoken, user_id)
         dev = gw.st.devices.get(cookie_device) if cookie_device else None
         if dev and dev["status"] == "blocked":
             raise auth.AuthError(403, "device_blocked", "This device is blocked")
@@ -196,9 +198,9 @@ def login_verify(req: LoginVerifyReq, request: Request, response: Response):
     return {"user": {"id": user_id, "username": user["username"]}, "device": dev, "new_device": dev["status"] != "trusted"}
 
 @app.post("/api/auth/logout")
-def logout(response: Response, a: Auth = Depends(auth.require)):
+def logout(request: Request, response: Response, a: Auth = Depends(auth.require)):
     auth.revoke_session(a.session_id)
-    auth.clear_session_cookie(response)
+    auth.clear_session_cookie(request, response)
     return {"ok": True}
 
 
@@ -377,4 +379,4 @@ def health():
     return {"ok": True, "ledger": Ledger.network}
 
 
-print(f"[IntentLock] ledger mode: {Ledger.network}  (expected 'simulated' for the demo)")
+print(f"[PayPilot] ledger mode: {Ledger.network}  (expected 'simulated' for the demo)")
