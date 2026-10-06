@@ -16,6 +16,7 @@ if os.getenv("PAYPILOT_MASTER_KEY"):
 else:
     MASTER_KEY = secrets.token_bytes(32)
     log.warning("PAYPILOT_MASTER_KEY not set: using a random per-process key")
+DB_PATH = os.getenv("PAYPILOT_DB", "paypilot.db")      # chat history (SQLite); ":memory:" for tests
 SESSION_COOKIE = "il_sess"
 DEVICE_COOKIE = "il_dev"
 SESSION_TTL = 7 * 86400

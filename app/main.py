@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import AfterValidator, BaseModel, Field
 
-from . import auth, config, lab as LAB
+from . import auth, chat_context, chat_store, config, lab as LAB
 from . import merchants as M
 from . import passkeys as PK
 from .agent import AGENT
@@ -108,10 +108,16 @@ class RegisterVerifyReq(BaseModel):
 
 class ChatReq(BaseModel):
     message: str = Field(min_length=1, max_length=600)
+    conversation_id: str | None = Field(default=None, max_length=40)
+
+
+class ContextEditReq(BaseModel):
+    context: dict
 
 
 class PrepareReq(BaseModel):
     option_id: str = Field(max_length=40)
+    conversation_id: str | None = Field(default=None, max_length=40)
 
 
 class CredReq(BaseModel):
@@ -313,14 +319,71 @@ def block_device(device_id: str, a: Auth = Depends(auth.require)):
 
 
 # -------------------------------------------------------------------- agent
+def _own_conversation(a: Auth, cid: str) -> dict:
+    conv = chat_store.get(a.user_id, cid)          # scoped by user_id: other users' ids look like "not found"
+    if not conv:
+        raise HTTPException(404, {"code": "no_conversation", "message": "Conversation not found"})
+    return conv
+
+
 @app.post("/api/agent/chat")
 def agent_chat(req: ChatReq, a: Auth = Depends(auth.require)):
-    return run(a, lambda gw, s: AGENT.chat(gw, a.user_id, req.message))
+    limit(f"chat:{a.user_id}", 60, 300)
+    conv = _own_conversation(a, req.conversation_id) if req.conversation_id else chat_store.create(a.user_id)
+    history = chat_store.messages(a.user_id, conv["id"], 20)      # recent turns, read server-side so they cannot be forged
+    res = run(a, lambda gw, s: AGENT.chat(gw, a.user_id, req.message, conv["context"], history))
+    res["conversation_id"] = conv["id"]
+    chat_store.add_message(a.user_id, conv["id"], "user", req.message)
+    chat_store.add_message(a.user_id, conv["id"], "agent", res["text"],
+                           {k: res.get(k) for k in ("options", "browsed", "resolved", "needs")})
+    chat_store.set_context(a.user_id, conv["id"], res["context"])
+    chat_store.set_title(a.user_id, conv["id"], req.message)
+    return res
+
+
+@app.get("/api/chat/conversations")
+def conversations(a: Auth = Depends(auth.require)):
+    return [{k: c[k] for k in ("id", "title", "updated")} for c in chat_store.list_for(a.user_id)]
+
+
+@app.post("/api/chat/conversations")
+def new_conversation(a: Auth = Depends(auth.require)):
+    return chat_store.create(a.user_id)
+
+
+@app.get("/api/chat/conversations/{cid}")
+def conversation(cid: str, a: Auth = Depends(auth.require)):
+    return {**_own_conversation(a, cid), "messages": chat_store.messages(a.user_id, cid)}
+
+
+@app.patch("/api/chat/conversations/{cid}/context")
+def edit_context(cid: str, req: ContextEditReq, a: Auth = Depends(auth.require)):
+    """Chip edits. Applies to future messages only: intents already prepared keep the values they were digested with."""
+    conv = _own_conversation(a, cid)
+    try:
+        updates = chat_context.validate_edit(req.context)
+    except ValueError as e:
+        raise HTTPException(422, {"code": "invalid_context", "message": str(e)})
+    ctx = {**conv["context"], **updates}
+    ctx = {k: v for k, v in ctx.items() if v is not None}
+    chat_store.set_context(a.user_id, cid, ctx)
+    return ctx
+
+
+@app.delete("/api/chat/conversations/{cid}")
+def delete_conversation(cid: str, a: Auth = Depends(auth.require)):
+    _own_conversation(a, cid)
+    chat_store.delete(a.user_id, cid)
+    return {"ok": True}
 
 
 @app.post("/api/agent/prepare")
 def agent_prepare(req: PrepareReq, a: Auth = Depends(auth.require)):
-    return run(a, lambda gw, s: AGENT.prepare(gw, s, a.user_id, req.option_id))
+    it = run(a, lambda gw, s: AGENT.prepare(gw, s, a.user_id, req.option_id))
+    if req.conversation_id and (conv := chat_store.get(a.user_id, req.conversation_id)):
+        chat_store.set_context(a.user_id, conv["id"], {**conv["context"], "last_selected": {
+            "title": (it.get("payload") or {}).get("title"), "merchant": it.get("merchant_name")}})
+    return it
 
 
 @app.post("/api/agent/bookings/{booking_id}/{action}")

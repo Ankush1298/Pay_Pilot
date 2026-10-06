@@ -8,10 +8,10 @@ To use a real LLM, replace `chat()`'s parsing/ranking with a model call; keep
 """
 from __future__ import annotations
 
-import re
 import secrets
 from typing import Any
 
+from . import chat_context as CC
 from . import merchants as M
 from .gateway import Gateway, GatewayError
 
@@ -23,23 +23,33 @@ _options: dict[str, dict[str, dict]] = {}  # user_id -> {option_id -> option}
 
 
 def parse(msg: str) -> dict:
-    q = msg.lower()
-    kind = "movie" if any(w in q for w in MOVIE_WORDS) and "hotel" not in q else "hotel"
-    city = next((c for c in CITIES if c.lower() in q), "Jaipur")
-    nm = re.search(r"(\d+)\s*(?:night|day)", q)
-    tk = re.search(r"(\d+)\s*(?:ticket|seat|people|person)", q)
-    bm = re.search(r"(?:under|below|within|budget(?: of)?|max|upto|up to)\s*(?:₹|rs\.?|inr)?\s*(\d[\d,]*)", q)
-    um = re.search(r"https?://([^\s/]+)", msg)
-    units = int(nm.group(1)) if (nm and kind == "hotel") else int(tk.group(1)) if (tk and kind == "movie") else 1
-    return {"kind": kind, "city": city, "units": max(1, units),
-            "budget": float(bm.group(1).replace(",", "")) if bm else None,
-            "url_domain": um.group(1).lower() if um else None}
+    """Back-compat: stateless parse with the old defaults (Jaipur / hotel)."""
+    e = CC.parse_message(msg)
+    return {"kind": e.get("kind", "hotel"), "city": e.get("city", "Jaipur"), "units": e.get("units", 1),
+            "budget": e.get("budget"), "url_domain": e.get("url_domain")}
 
 
 class Agent:
-    def chat(self, gw: Gateway, user_id: str, message: str) -> dict:
-        p = parse(message)
-        gw.st.active_user_intent = {**p, "set_at": gw.st.now()}
+    def chat(self, gw: Gateway, user_id: str, message: str, ctx: dict | None = None,
+             history: list[dict] | None = None) -> dict:
+        ctx = ctx or (CC.rebuild(history) if history else {})
+        explicit = CC.parse_message(message)
+        select = explicit.pop("_select", None)
+        ctx = CC.merge(ctx, explicit)
+        base = {"context": ctx, "options": [], "browsed": [], "resolved": []}
+        if not ctx.get("kind"):
+            return {**base, "text": "What would you like to book: a hotel or a movie? Tell me the city too.", "needs": "kind"}
+        if not ctx.get("city") and not explicit.get("url_domain"):
+            return {**base, "text": f"Which city should I search for your {ctx['kind']}? I won't guess.", "needs": "city"}
+        kind = ctx["kind"]
+        resolved = [{"field": f, "value": ctx[f]["text"] if f == "dates" else ctx[f], "source": "earlier in this chat"}
+                    for f in ("city", "dates", "budget", "guests", "merchant", "units")
+                    if ctx.get(f) not in (None, "") and f not in explicit]
+        p = {"kind": kind, "city": ctx.get("city") or "Unknown", "units": ctx.get("units") or (ctx.get("guests") if kind == "movie" else None) or 1,
+             "budget": ctx.get("budget"), "url_domain": explicit.get("url_domain"), "dates": ctx.get("dates"),
+             "guests": ctx.get("guests"), "merchant": ctx.get("merchant"), "currency": ctx.get("currency", "INR"),
+             "resolved": resolved}
+        gw.st.active_user_intent = {**{k: p[k] for k in ("kind", "city", "units", "budget")}, "set_at": gw.st.now()}
         browsed, options = [], []
         label = "night" if p["kind"] == "hotel" else "ticket"
         user_opts = _options.setdefault(user_id, {})
@@ -70,6 +80,8 @@ class Agent:
 
         if p["budget"]:
             options = [o for o in options if o["unit_price"] <= p["budget"]]
+        if p["merchant"]:
+            options = [o for o in options if o["domain"] == p["merchant"]]
         for o in options:
             rec = M.resolve(o["domain"])
             score = (o["rating"] or 3.5) * 10 - o["unit_price"] / 200
@@ -82,8 +94,17 @@ class Agent:
         if options:
             options[0]["best"] = True
 
+        if select is not None and options:
+            pick = (min(options, key=lambda o: o["total"]) if select == "cheapest" else options[0] if select == "best"
+                    else options[select if -len(options) <= select < len(options) else -1])
+            ref = {"field": "option", "value": f"{select} of the results shown", "source": "earlier in this chat"}
+            pick["query"]["resolved"] = resolved = [*resolved, ref]
+            options = [{**pick, "best": True}]
         if not options:
-            text = "I couldn't find anything matching that. Try a higher budget or another city."
+            if p["city"] not in {i["city"] for i in M.HOTELS + M.MOVIES}:
+                text = f"I don't have listings in {p['city']} yet (this demo covers Jaipur, Goa and Delhi)."
+            else:
+                text = "I couldn't find anything matching that. Try a higher budget or another city."
         else:
             b = options[0]
             text = (f"I compared {len(options)} option(s) across {len(browsed)} site(s) for {p['units']} "
@@ -95,7 +116,7 @@ class Agent:
             if b["flags"] or not (M.resolve(b["domain"]) or {}).get("verified"):
                 text += " Note: this merchant is unverified, so you'll be asked to confirm."
         public = [{k: v for k, v in o.items() if not k.startswith("_")} for o in options]
-        return {"text": text, "options": public, "browsed": browsed, "query": p}
+        return {"text": text, "options": public, "browsed": browsed, "query": p, "context": ctx, "resolved": resolved}
 
     def _option(self, user_opts: dict, p, domain, title, unit_price, rating, reviews, label,
                 *, pay_to=None, flags=None, injected=None, perks=""):
@@ -123,11 +144,18 @@ class Agent:
             ctx["injection_suspected"] = True
         query = o.get("query") or {}
         ctx["user_intent"] = {"kind": query.get("kind", o["kind"]), "city": query.get("city", o["city"]), "budget": query.get("budget")}
+        payload = {"title": o["title"], "city": o["city"], "units": o["units"],
+                   "unit_price": o["unit_price"], "unit_label": o["unit_label"]}
+        if query.get("dates"):
+            payload["dates"] = query["dates"]["text"] + (f" ({query['dates']['start']})" if query["dates"].get("start") else "")
+        if query.get("guests"):
+            payload["guests"] = query["guests"]
+        if query.get("resolved"):
+            payload["resolved_from_context"] = query["resolved"]     # inside the payload, so inside the digest
         return gw.submit_intent(
             sess, origin="agent", type=o["kind"], merchant_domain=o["domain"], pay_to=pay_to,
             amount=o["total"], purpose=f"{o['title']} ({o['units']} {o['unit_label']}(s), {o['city']})",
-            payload={"title": o["title"], "city": o["city"], "units": o["units"],
-                     "unit_price": o["unit_price"], "unit_label": o["unit_label"]}, context=ctx)
+            payload=payload, context=ctx)
 
     def manage_booking(self, gw: Gateway, sess: dict, action: str, booking_id: str,
                        units: int | None = None) -> dict:
