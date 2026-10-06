@@ -95,7 +95,8 @@ class Agent:
             options[0]["best"] = True
 
         if select is not None and options:
-            pick = (min(options, key=lambda o: o["total"]) if select == "cheapest" else options[0] if select == "best"
+            safe = [o for o in options if not o["flags"]] or options        # never pick a page that carried hidden instructions
+            pick = (min(safe, key=lambda o: o["total"]) if select == "cheapest" else safe[0] if select == "best"
                     else options[select if -len(options) <= select < len(options) else -1])
             ref = {"field": "option", "value": f"{select} of the results shown", "source": "earlier in this chat"}
             pick["query"]["resolved"] = resolved = [*resolved, ref]

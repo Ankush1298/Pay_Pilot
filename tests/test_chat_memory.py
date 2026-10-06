@@ -18,7 +18,7 @@ def test_city_carries_over_to_followups():
     cid = first["conversation_id"]
     cheapest = say(c, "book the cheapest one", cid)
     assert [o["city"] for o in cheapest["options"]] == ["Jaipur"]
-    assert cheapest["options"][0]["total"] == min(o["total"] for o in first["options"])
+    assert cheapest["options"][0]["total"] == min(o["total"] for o in first["options"] if not o["flags"])   # skips the injected page
     assert {"city", "option"} <= {r["field"] for r in cheapest["resolved"]}
     weekend = say(c, "what about next weekend?", cid)
     assert weekend["context"]["city"] == "Jaipur" and weekend["context"]["dates"]["text"] == "next weekend"

@@ -256,6 +256,18 @@ def me(a: Auth = Depends(auth.require)):
         return {"id": a.user_id, "username": a.username, "device_id": a.device_id, "wallet_address": gw.wallet, "has_passkey": bool(gw.st.credentials), "ledger_network": gw.ledger.network}
 
 
+@app.get("/api/auth/session")
+def session_status(request: Request):
+    """Like /me but answers 200 for signed-out visitors, so the UI can check without a console-visible 401."""
+    try:
+        a = auth.require(request)
+    except auth.AuthError:
+        return {"authenticated": False}
+    with REG.use(a.user_id) as gw:
+        return {"authenticated": True, "id": a.user_id, "username": a.username, "device_id": a.device_id,
+                "wallet_address": gw.wallet, "has_passkey": bool(gw.st.credentials), "ledger_network": gw.ledger.network}
+
+
 @app.get("/api/auth/sessions")
 def sessions(a: Auth = Depends(auth.require)):
     with REG.use(a.user_id) as gw:

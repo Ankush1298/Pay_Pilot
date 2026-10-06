@@ -212,3 +212,10 @@ def test_unhandled_error_does_not_leak_details():
     c = TestClient(app, raise_server_exceptions=False)
     r = c.post("/api/auth/register/verify", json={"credential": {"response": {"clientDataJSON": 5}}}, headers=H)
     assert r.status_code < 500 and "Traceback" not in r.text
+
+
+def test_session_status_is_200_for_visitors_and_users():
+    c, _ = register("sec-sessionstatus")
+    assert c.get("/api/auth/session").json()["authenticated"] is True
+    anon = TestClient(app).get("/api/auth/session")
+    assert anon.status_code == 200 and anon.json() == {"authenticated": False}

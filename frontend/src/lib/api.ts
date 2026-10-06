@@ -39,6 +39,7 @@ export const api = {
     loginVerify: (credential: any) => request("/auth/login/verify", { method: "POST", body: { credential } }),
     logout: () => request("/auth/logout", { method: "POST" }),
     me: () => request("/auth/me"),
+    session: () => request("/auth/session"),
   },
   state: {
     get: () => request("/state"),

@@ -23,8 +23,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      const data = await api.auth.me();
-      setUser(data);
+      const data = await api.auth.session();      // 200 even when signed out, so no 401 in the console
+      setUser(data.authenticated ? data : null);
     } catch (err: any) {
       if (err.code === "no_token" || err.code === "session_expired") {
         setUser(null);
