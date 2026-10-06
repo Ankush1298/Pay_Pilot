@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import secrets
+from typing import Any
 
 from . import merchants as M
 from .gateway import Gateway, GatewayError
@@ -27,7 +28,7 @@ def parse(msg: str) -> dict:
     city = next((c for c in CITIES if c.lower() in q), "Jaipur")
     nm = re.search(r"(\d+)\s*(?:night|day)", q)
     tk = re.search(r"(\d+)\s*(?:ticket|seat|people|person)", q)
-    bm = re.search(r"(?:under|below|within|budget(?: of)?|max|upto|up to)\s*(?:₹|rs\.?|inr)?\s*([\d,]+)", q)
+    bm = re.search(r"(?:under|below|within|budget(?: of)?|max|upto|up to)\s*(?:₹|rs\.?|inr)?\s*(\d[\d,]*)", q)
     um = re.search(r"https?://([^\s/]+)", msg)
     units = int(nm.group(1)) if (nm and kind == "hotel") else int(tk.group(1)) if (tk and kind == "movie") else 1
     return {"kind": kind, "city": city, "units": max(1, units),
@@ -100,7 +101,7 @@ class Agent:
                 *, pay_to=None, flags=None, injected=None, perks=""):
         rec = M.resolve(domain)
         oid = "opt_" + secrets.token_hex(4)
-        opt = {
+        opt: dict[str, Any] = {
             "id": oid, "kind": p["kind"], "domain": domain, "merchant_name": rec["name"] if rec else domain,
             "verified": bool(rec and rec["verified"]), "title": title, "city": p["city"], "units": p["units"],
             "unit_label": label, "unit_price": unit_price, "total": unit_price * p["units"],
@@ -117,7 +118,7 @@ class Agent:
         if not o:
             raise GatewayError(404, "no_option", "Unknown option; search again")
         pay_to = o["_pay_to"]
-        ctx = {}
+        ctx: dict[str, Any] = {}
         if o["flags"]:
             ctx["injection_suspected"] = True
         query = o.get("query") or {}
@@ -130,7 +131,7 @@ class Agent:
 
     def manage_booking(self, gw: Gateway, sess: dict, action: str, booking_id: str,
                        units: int | None = None) -> dict:
-        payload = {"booking_id": booking_id}
+        payload: dict[str, Any] = {"booking_id": booking_id}
         if action == "modify":
             payload["units"] = units
         return gw.submit_intent(sess, origin="agent", type=f"{action}_booking", payload=payload)

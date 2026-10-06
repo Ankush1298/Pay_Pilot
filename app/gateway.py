@@ -17,7 +17,7 @@ from . import config
 from . import passkeys as PK
 from .crypto import digest as make_digest, hmac_tag
 from .ledger import Ledger, LedgerError
-from .policy import PAY_TYPES, STRIKE_RULES, evaluate, inr
+from .policy import PAY_TYPES, STRIKE_RULES, evaluate, inr, valid_policy_change
 from .state import State
 
 DIGEST_FIELDS = ["type", "merchant_domain", "pay_to", "amount", "currency", "purpose", "payload",
@@ -118,18 +118,18 @@ class Gateway:
         if not st.onboarding_open or st.now() - st.created > 1800 or st.executions:
             raise GatewayError(403, "onboarding_closed", "Initial setup is closed. Changes now need biometric approval.")
         self._require_trusted(sess)
-        probe = {"type": "change_settings", "origin": "user", "payload": {"policy": new_policy}, "amount": 0,
-                 "session_id": sess["id"], "device_id": sess["device_id"], "expiry": st.now() + 60,
-                 "nonce": "probe", "pay_to": None}
-        if any(r["rule"] == "invalid_policy" for r in evaluate(st, probe, recheck=True)["reasons"]):
-            raise GatewayError(422, "invalid_policy", "Those policy values are not valid")
-        self._apply_policy(new_policy)
+        self.apply_policy_checked(new_policy)
         st.log("policy", "Initial security policy set", "ok")
         return st.policy
 
     def finish_onboarding(self, sess: dict):
         self._require_trusted(sess)
         self.st.onboarding_open = False
+
+    def apply_policy_checked(self, p: dict):
+        if not valid_policy_change(p, self.st.policy["absolute_cap"]):
+            raise GatewayError(422, "invalid_policy", "Those policy values are not valid")
+        self._apply_policy(p)
 
     def _apply_policy(self, p: dict):
         for k, v in p.items():
@@ -190,6 +190,11 @@ class Gateway:
                       lab: bool = False) -> dict:
         st = self.st
         payload = copy.deepcopy(payload or {})
+        merchant_domain = M.normalize(merchant_domain)
+        try:
+            amount = round(float(amount), 2)
+        except (TypeError, ValueError):
+            raise GatewayError(400, "bad_amount", "Amount must be a number")
         if origin == "agent" and type in PAY_TYPES:
             active = self.st.active_user_intent
             if active and self.st.now() - float(active.get("set_at", 0)) <= 1800:
@@ -200,7 +205,7 @@ class Gateway:
 
         # Amounts for cancel/modify are derived by the server from the booking, never taken from the caller.
         if type in {"cancel_booking", "modify_booking"}:
-            b = st.bookings.get(payload.get("booking_id"))
+            b = st.bookings.get(str(payload.get("booking_id")))
             if not b or b["status"] != "confirmed":
                 raise GatewayError(404, "no_booking", "Booking not found or not active")
             merchant_domain = b["merchant_domain"]
@@ -223,7 +228,7 @@ class Gateway:
         it = {
             "id": "int_" + secrets.token_hex(5), "type": type, "origin": origin, "lab": lab,
             "merchant_domain": merchant_domain, "merchant_name": rec["name"] if rec else merchant_domain,
-            "pay_to": pay_to, "amount": round(float(amount), 2), "currency": "INR", "purpose": purpose,
+            "pay_to": pay_to, "amount": amount, "currency": "INR", "purpose": purpose,
             "payload": payload, "context": context or {}, "session_id": sess["id"],
             "device_id": sess["device_id"], "created_at": st.now(), "expiry": round(st.now() + ttl, 3),
             "nonce": secrets.token_hex(8), "status": "new", "tx_hash": None, "booking_id": None,
@@ -431,5 +436,5 @@ class Gateway:
                        "faucet_url": None if self.ledger.network == "simulated" else config.FAUCET_URL,
                        "explorer_url": None if self.ledger.network == "simulated" else config.EXPLORER_URL,
                        "balance_tmon": self.ledger.balance_tmon(),
-                       "balance_inr": round(self.ledger.balance_tmon() * 100, 2), "txs": self.ledger.txs[-10:][::-1]},
+                       "balance_inr": round(self.ledger.balance_tmon() * config.INR_PER_MON, 2), "txs": self.ledger.txs[-10:][::-1]},
         }

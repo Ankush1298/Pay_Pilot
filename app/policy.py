@@ -22,6 +22,21 @@ STRIKE_RULES = {"pay_to_mismatch", "device_locked", "device_blocked", "agent_for
 POLICY_KEYS = {"per_tx_limit", "daily_limit", "allowed_types", "approved_merchants"}
 
 
+def valid_policy_change(newp, cap: float) -> bool:
+    """Whitelist + range check for a policy change. NaN/inf/negative/over-cap values and unknown keys are refused."""
+    if not isinstance(newp, dict) or set(newp) - POLICY_KEYS:
+        return False
+    for k in ("per_tx_limit", "daily_limit"):
+        if k in newp:
+            v = newp[k]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= cap:   # NaN fails both
+                return False
+    for k in ("allowed_types", "approved_merchants"):
+        if k in newp and not (isinstance(newp[k], list) and all(isinstance(x, str) and len(x) <= 100 for x in newp[k])):
+            return False
+    return set(newp.get("allowed_types", [])) <= PAY_TYPES
+
+
 def inr(x: float) -> str:
     return f"₹{x:,.0f}" if float(x).is_integer() else f"₹{x:,.2f}"
 
@@ -64,8 +79,9 @@ def evaluate(st, it: dict, recheck: bool = False) -> dict:
         add("block", "expired", "Intent has expired", 10)
     if not recheck and it["nonce"] in st.nonces:
         add("block", "replay", "Nonce already used (replay)", 50)
-    if it["amount"] < 0:
-        add("block", "invalid_amount", "Negative amount", 50)
+    amt0 = it["amount"]
+    if not math.isfinite(amt0) or amt0 < 0 or (amt0 == 0 and t in PAY_TYPES | {"p2p_transfer"}):
+        add("block", "invalid_amount", "Amount must be a positive, finite number", 50)
     if t in PAY_TYPES | {"p2p_transfer"} and it["amount"] > pol["absolute_cap"]:
         add("block", "absolute_cap", f"Above the absolute cap of {inr(pol['absolute_cap'])}", 60)
 
@@ -107,7 +123,7 @@ def evaluate(st, it: dict, recheck: bool = False) -> dict:
             if not rec["verified"] and rec["domain"] not in pol["approved_merchants"]:
                 add("step_up", "unfamiliar_merchant",
                     f"'{rec['name']}' is not a verified merchant and not on your approved list", 30)
-            if it["pay_to"].lower() != rec["pay_to"].lower():
+            if str(it.get("pay_to") or "").lower() != rec["pay_to"].lower():
                 add("block", "pay_to_mismatch",
                     f"Payment address does not match {rec['name']}'s registered payout address", 70)
 
@@ -128,7 +144,7 @@ def evaluate(st, it: dict, recheck: bool = False) -> dict:
         b = st.bookings.get((it.get("payload") or {}).get("booking_id"))
         if not b or b["status"] != "confirmed":
             add("block", "no_such_booking", "Booking not found or not active", 20)
-        elif t == "cancel_booking" and (it["pay_to"] != b["payer"] or it["amount"] > b["amount"]):
+        elif t == "cancel_booking" and (it.get("pay_to") != b["payer"] or it["amount"] > b["amount"]):
             add("block", "refund_destination_mismatch", "Refunds may only go back to the original payer", 60)
 
     # ---- device approval / settings changes ------------------------------
@@ -137,14 +153,7 @@ def evaluate(st, it: dict, recheck: bool = False) -> dict:
         if not tgt or tgt["status"] != "pending":
             add("block", "bad_target", "Device does not exist or is not pending", 20)
     if t == "change_settings":
-        newp = (it.get("payload") or {}).get("policy", {})
-        try:
-            if set(newp) - POLICY_KEYS:
-                raise ValueError
-            for k in ("per_tx_limit", "daily_limit"):
-                if k in newp and not 0 <= float(newp[k]) <= pol["absolute_cap"]:
-                    raise ValueError
-        except (ValueError, TypeError):
+        if not valid_policy_change((it.get("payload") or {}).get("policy", {}), pol["absolute_cap"]):
             add("block", "invalid_policy", "Invalid policy values", 20)
 
     # ---- agent self-reports can only escalate ----------------------------

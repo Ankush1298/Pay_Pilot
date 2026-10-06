@@ -6,7 +6,7 @@ through the smart account in contracts/; it needs a deployed factory, a funded r
 In live mode the relayer pays gas but never owns the user's smart-account funds.
 """
 from __future__ import annotations
-import base64, hashlib, json, os, time
+import base64, hashlib, json, time
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from . import config
@@ -20,13 +20,20 @@ class MockLedger:
         self._key, self.user_addr = auth_key, user_addr
         self.txs = data.get("txs", []) if data else []
     def to_dict(self): return {"txs": self.txs}
-    def balance_tmon(self): return max(0.0, 1000.0 - sum(x.get("amount_tmon", 0) for x in self.txs))
+    def balance_tmon(self):
+        """Faucet balance minus what left the wallet plus what came back (refunds)."""
+        out = sum(x["amount_tmon"] for x in self.txs if x["from"] == self.user_addr)
+        back = sum(x["amount_tmon"] for x in self.txs if x["to"] == self.user_addr)
+        return max(0.0, 1000.0 - out + back)
     def faucet(self): raise LedgerError("Simulated ledger: there is nothing to fund")
     def initialize_wallet(self, *args, **kwargs): return self.user_addr
     def add_passkey(self, credential: dict): return True
-    def set_policy(self, per_tx: int, daily: int, passkey_data: dict, intent_hash: str): return True
+    def set_policy(self, per_tx: int, daily: int, passkey_data: dict | None, intent_hash: str): return True
     def transfer(self, auth, digest, sender, to, amount_inr, memo="", allow_overdraft=False, intent_data=None, passkey_data=None):
         if not hmac_ok(self._key, digest, auth or ""): raise LedgerError("Invalid policy authorization")
+        if any(x["digest"] == digest for x in self.txs): raise LedgerError("Authorization already used")
+        if not (amount_inr > 0 and amount_inr < float("inf")): raise LedgerError("Invalid amount")
+        if not allow_overdraft and self.balance_tmon() < amount_inr / config.INR_PER_MON: raise LedgerError("Insufficient funds")
         tx_hash = "0x" + hashlib.sha256(f"test:{digest}:{len(self.txs)}".encode()).hexdigest()
         tx = {"tx_hash": tx_hash, "block": 0, "digest": digest, "from": sender, "to": to,
               "amount_inr": amount_inr, "amount_tmon": amount_inr / config.INR_PER_MON,
@@ -86,7 +93,7 @@ else:
         if receipt.status != 1: raise LedgerError("Monad transaction reverted")
         return w3.to_hex(h), receipt
 
-    class Ledger:
+    class Ledger:  # type: ignore[no-redef]
         network = "monad-testnet"
         def __init__(self, auth_key: bytes, user_addr: str | None, data=None, start_tmon=0.0):
             self._key, self.user_addr = auth_key, user_addr
@@ -141,6 +148,7 @@ else:
 
         def transfer(self, auth, digest, sender, to, amount_inr, memo="", allow_overdraft=False, intent_data=None, passkey_data=None):
             if not hmac_ok(self._key, digest, auth or ""): raise LedgerError("Ledger rejected transfer: invalid policy authorization")
+            if any(x["digest"] == digest for x in self.txs): raise LedgerError("Authorization already used")
             if not self.user_addr: raise LedgerError("Smart account is not deployed")
             if not w3.is_address(to): raise LedgerError("Invalid merchant address")
             amount_wei = int(round((amount_inr / config.INR_PER_MON) * 1e18))

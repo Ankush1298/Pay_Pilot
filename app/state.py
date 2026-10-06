@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import copy
 import time
+from typing import Any
 
-DEFAULT_POLICY = {
+DEFAULT_POLICY: dict[str, Any] = {
     "per_tx_limit": 1500,          # auto-approve up to this amount (INR)
     "daily_limit": 5000,           # rolling 24h cumulative auto-spend
     "absolute_cap": 25000,         # never allowed, even with strong auth

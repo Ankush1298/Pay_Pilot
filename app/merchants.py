@@ -11,7 +11,10 @@ import hashlib
 import re
 import secrets
 import time
+import unicodedata
+import hmac
 from html import escape
+from typing import Any
 
 
 def addr(seed: str) -> str:
@@ -25,7 +28,7 @@ def user_addr(user_id: str) -> str:
 USER_ADDR = addr("user-wallet")
 ATTACKER_ADDR = addr("attacker-wallet")
 
-REGISTRY = {
+REGISTRY: dict[str, dict[str, Any]] = {
     "grandstay.mock": dict(name="GrandStay Hotels", kind="hotel", verified=True, pay_to=addr("grandstay"),
                            members={"ankush": "demo123", "guest": "guest123"}),
     "cityinn.mock": dict(name="CityInn", kind="hotel", verified=True, pay_to=addr("cityinn"),
@@ -42,7 +45,7 @@ REGISTRY = {
 for _d, _m in REGISTRY.items():
     _m["domain"] = _d
 
-HOTELS = [
+HOTELS: list[dict[str, Any]] = [
     dict(id="h1", domain="grandstay.mock", name="Pink City Residency", city="Jaipur", price=800, rating=4.4, reviews=1240, perks="Breakfast, Wi-Fi"),
     dict(id="h2", domain="cityinn.mock", name="Rajputana Lodge", city="Jaipur", price=650, rating=4.0, reviews=860, perks="Wi-Fi"),
     dict(id="h3", domain="royalpalace.mock", name="Maharaja Suites", city="Jaipur", price=2400, rating=4.8, reviews=2100, perks="Pool, Spa, Breakfast"),
@@ -52,7 +55,7 @@ HOTELS = [
     dict(id="h7", domain="grandstay.mock", name="Connaught Central", city="Delhi", price=1300, rating=4.3, reviews=1510, perks="Metro access"),
     dict(id="h8", domain="royalpalace.mock", name="Imperial Grand", city="Delhi", price=3200, rating=4.7, reviews=1900, perks="Pool, Spa"),
 ]
-MOVIES = [
+MOVIES: list[dict[str, Any]] = [
     dict(id="m1", domain="cineplex.mock", name="Orbit (Sci-fi, IMAX 7:30 PM)", city="Jaipur", price=450, rating=4.8, reviews=5200, perks="IMAX"),
     dict(id="m2", domain="showtime.mock", name="Monsoon Letters (Drama, 6:45 PM)", city="Jaipur", price=320, rating=4.5, reviews=2300, perks="Recliner seats"),
     dict(id="m3", domain="showtime.mock", name="Orbit (Sci-fi, 9:00 PM)", city="Jaipur", price=300, rating=4.6, reviews=1800, perks="Standard"),
@@ -80,13 +83,20 @@ def inventory(kind: str, city: str | None = None):
     return [i for i in items if city is None or i["city"].lower() == city.lower()]
 
 
+def normalize(domain: str | None) -> str | None:
+    """Canonical form used everywhere a merchant domain is compared: NFKC, lower-case, no spaces or trailing dot."""
+    if domain is None:
+        return None
+    return unicodedata.normalize("NFKC", str(domain)).strip().lower().rstrip(".")
+
+
 def resolve(domain: str | None):
-    return REGISTRY.get((domain or "").lower())
+    return REGISTRY.get(normalize(domain) or "")
 
 
 def lookalike(domain: str | None):
     """Return the registered domain this one imitates, if any."""
-    d = (domain or "").lower()
+    d = normalize(domain) or ""
     if not d or d in REGISTRY:
         return None
     base = d.split(".")[0].replace("-", "")
@@ -140,7 +150,7 @@ def issue_code(domain: str, member: str, password: str, state: str) -> str | Non
     if not m:
         return None
     members = m.get("members", {})
-    if members.get(member) != password:
+    if not hmac.compare_digest(str(members.get(member, "\0")).encode(), password.encode()):
         return None
     code = secrets.token_hex(16)
     _auth_codes[code] = {"domain": domain, "member": member, "exp": time.time() + 300}
