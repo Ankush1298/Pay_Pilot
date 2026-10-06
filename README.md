@@ -17,7 +17,7 @@ Two terminals.
 ```bash
 # Terminal 1: backend (FastAPI)
 python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt            # requirements-dev.txt adds pytest/ruff/mypy
 python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 # Terminal 2: frontend (Next.js)
@@ -28,7 +28,8 @@ cd frontend && npm install && npm run dev      # http://localhost:3000
 and the relying-party ID defaults to `localhost`; override with `PAYPILOT_RP_ID`). You need a browser
 and device that support passkeys (Touch ID, Windows Hello, Android, or a security key).
 
-Tests: `python -m pytest -q`.
+Tests: `pip install -r requirements-dev.txt && python -m pytest -q` (includes an end-to-end run with a software
+passkey, `tests/virtual_authenticator.py`). Lint/types: `ruff check app tests && mypy app`; frontend: `npm run lint && npm run build`.
 
 ## What the demo shows
 
