@@ -1,0 +1,12 @@
+{
+  "network": "monadTestnet",
+  "chainId": 10143,
+  "rpc": "https://testnet-rpc.monad.xyz",
+  "explorer": "https://testnet.monadvision.com",
+  "faucet": "https://faucet.monad.xyz",
+  "deployed": true,
+  "PayPilotFactory": "0xAE16Dc901A8C0fAdDc9F2447F36F51Aa104F4fC5",
+  "PayPilotWalletImpl": "0xB44d47B61bA230cE859954ee185a2c742a58E114",
+  "deployedAt": "2026-10-07T18:29:48+00:00",
+  "deploymentTx": "0x3480a4fd048be440e03dab6d24ddcd819a004d4651caec3adcb7067516307143"
+}
