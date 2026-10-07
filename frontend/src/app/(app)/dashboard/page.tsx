@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthContext";
 import { useToast } from "@/components/ToastContext";
 import { api } from "@/lib/api";
+import { copyText } from "@/lib/copy";
 import { assertPasskey } from "@/lib/passkeys";
 import { ChatPanel } from "@/components/ChatPanel";
 import { DashboardSkeleton } from "@/components/Skeleton";
@@ -26,6 +27,7 @@ export default function Dashboard() {
   const { show } = useToast();
   const [state, setState] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [intent, setIntent] = useState<any>(null);
   const [labResult, setLabResult] = useState<any>(null);
   const [labBusy, setLabBusy] = useState<string | null>(null);
@@ -73,6 +75,7 @@ export default function Dashboard() {
       }
       const r = await api.intents.approve(id, credential);
       if (r.status === "blocked") { setIntent(null); show("warn", "Security re-check blocked this transaction"); }
+      else if (r.status === "failed") { setIntent(null); show("crit", r.error ? `Payment failed: ${r.error}` : "Payment failed"); await loadState(); }
       else { setVerdict({ kind: "approved", text: r.booking_id ? `Approved. Booking ${r.booking_id} confirmed.` : "Approved." }); setTimeout(() => { setVerdict(null); setIntent(null); }, 1600); }
       await loadState();
     } catch (e: any) {
@@ -188,9 +191,21 @@ export default function Dashboard() {
           </section>
 
           <section className="card">
-            <div className="card-header"><div><div className="card-title">Wallet</div><div className="card-sub">{state?.ledger?.simulated ? "Simulated ledger (demo funds)" : "Monad testnet"}</div></div>{!state?.ledger?.simulated && state?.ledger?.faucet_url && <button className="btn btn-sm" onClick={() => window.open(state.ledger.faucet_url, "_blank", "noopener,noreferrer")}>Faucet</button>}</div>
+            <div className="card-header"><div><div className="card-title">Wallet</div><div className="card-sub">{state?.ledger?.simulated ? "Simulated ledger (demo funds)" : "Monad testnet"}</div></div></div>
             <div className="wallet-balance">{money(state?.ledger?.balance_inr)}</div>
-            <div className="mono address">{state?.ledger?.address || "—"}</div>
+            {!state?.ledger?.simulated && (
+              <div style={{ marginTop: ".75rem" }}>
+                <div className="text-sm" style={{ fontWeight: 600 }}>Your wallet address</div>
+                <div className="text-sm text-muted" style={{ marginBottom: ".4rem" }}>Send testnet MON to this address to fund payments.</div>
+                <div className="mono" style={{ wordBreak: "break-all", fontSize: ".82rem", padding: ".6rem .7rem", border: "1px solid var(--border, #2a3340)", borderRadius: 8, userSelect: "all" }}>{state?.ledger?.address || "Creating your wallet…"}</div>
+                <div style={{ display: "flex", gap: ".5rem", marginTop: ".6rem", flexWrap: "wrap" }}>
+                  <button className="btn btn-primary btn-sm" disabled={!state?.ledger?.address} onClick={async () => { const ok = await copyText(state.ledger.address); if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); } show(ok ? "ok" : "warn", ok ? "Wallet address copied" : "Copy failed. Select the address and copy it manually."); }}>{copied ? "Copied ✓" : "Copy address"}</button>
+                  {state?.ledger?.faucet_url && <button className="btn btn-sm" onClick={() => window.open(state.ledger.faucet_url, "_blank", "noopener,noreferrer")}>Open faucet</button>}
+                </div>
+                <div className="text-sm text-muted" style={{ marginTop: ".5rem" }}>Copy the address first, then paste it into the faucet. Refresh after funds arrive.</div>
+              </div>
+            )}
+            {state?.ledger?.simulated && <div className="mono address">{state?.ledger?.address || "—"}</div>}
           </section>
 
           <section className="card">

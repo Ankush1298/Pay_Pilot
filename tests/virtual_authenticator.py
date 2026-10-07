@@ -48,7 +48,7 @@ class VirtualAuthenticator:
         return b64u(self.cred_id)
 
     def _client_data(self, typ: str, challenge: str, origin=None) -> bytes:
-        return json.dumps({"type": typ, "challenge": challenge, "origin": origin or self.origin}).encode()
+        return json.dumps({"type": typ, "challenge": challenge, "origin": origin or self.origin}, separators=(",", ":")).encode()   # compact like real browsers
 
     def create(self, opts: dict, *, flags=0x45, origin=None, cred_id=None) -> dict:
         self.user_handle = unb64u(opts["user"]["id"])

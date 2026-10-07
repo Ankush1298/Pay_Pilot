@@ -37,7 +37,7 @@ def test_passkey_registration_and_login_options_are_passwordless():
 
 def test_auto_approval_under_limit():
     c, _ = make_client("auto_user")
-    chat = c.post("/api/agent/chat", json={"message": "Find a hotel in Jaipur under 1000"}).json()
+    chat = c.post("/api/agent/chat", json={"message": "Find a hotel in Jaipur under 1000 tomorrow"}).json()
     opt = chat["options"][0]
     result = c.post("/api/agent/prepare", json={"option_id": opt["id"]}).json()
     assert result["status"] == "executed"
@@ -47,7 +47,7 @@ def test_auto_approval_under_limit():
 
 def test_over_limit_requires_step_up():
     c, _ = make_client("stepup_user")
-    chat = c.post("/api/agent/chat", json={"message": "Find a hotel in Jaipur under 2400"}).json()
+    chat = c.post("/api/agent/chat", json={"message": "Find a hotel in Jaipur under 2400 tomorrow"}).json()
     opt = next(x for x in chat["options"] if x["domain"] == "royalpalace.mock")
     result = c.post("/api/agent/prepare", json={"option_id": opt["id"]}).json()
     assert result["status"] == "pending_approval"
@@ -68,7 +68,7 @@ def test_passkey_approval_no_server_error():
             "pub_x": nums.x.to_bytes(32, "big").hex(), "pub_y": nums.y.to_bytes(32, "big").hex(),
             "key_id": hashlib.sha256(cred_id.encode()).hexdigest(), "sign_count": 0, "created": gw.st.now(),
         }
-    chat = c.post("/api/agent/chat", json={"message": "Find a hotel in Jaipur under 2400"}).json()
+    chat = c.post("/api/agent/chat", json={"message": "Find a hotel in Jaipur under 2400 tomorrow"}).json()
     opt = next(x for x in chat["options"] if x["domain"] == "royalpalace.mock")
     intent = c.post("/api/agent/prepare", json={"option_id": opt["id"]}).json()
     assert intent["status"] == "pending_approval"
@@ -89,11 +89,11 @@ def test_agent_cannot_change_original_budget_or_intent_type():
     with REG.use(uid) as gw:
         # A deliberately different option is inserted as if a compromised agent found it earlier.
         from app.agent import AGENT
-        AGENT.chat(gw, uid, "Find a hotel in Jaipur under 1500")
-        older = AGENT.chat(gw, uid, "Find a hotel in Jaipur under 2400")
+        AGENT.chat(gw, uid, "Find a hotel in Jaipur under 1500 tomorrow")
+        older = AGENT.chat(gw, uid, "Find a hotel in Jaipur under 2400 tomorrow")
         opt = next(x for x in older["options"] if x["domain"] == "royalpalace.mock")
         # Restore the real current user intent to the 1500 request.
-        AGENT.chat(gw, uid, "Find a hotel in Jaipur under 1500")
+        AGENT.chat(gw, uid, "Find a hotel in Jaipur under 1500 tomorrow")
         sess = next(iter(gw.st.sessions.values()))
         result = AGENT.prepare(gw, sess, uid, opt["id"])
     assert result["decision"]["verdict"] == "BLOCK"

@@ -8,7 +8,7 @@ import { useToast } from "./ToastContext";
 
 const money = (v: number | string | null | undefined) => `₹${Number(v || 0).toLocaleString("en-IN")}`;
 const clock = (ts: number) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-const WELCOME: Msg = { role: "agent", ts: Date.now() / 1000, content: "Tell me what you want to book, for example “find a hotel in Jaipur under ₹1,500”. I remember what you tell me in this chat, and I’ll ask rather than guess." };
+const WELCOME: Msg = { role: "agent", ts: Date.now() / 1000, content: "Tell me what you want to book, for example “book a hotel in Jaipur under ₹1,500 for tomorrow”. I remember what you tell me in this chat, and I’ll ask for the city or date rather than guess." };
 
 /** Reveals text word by word (streaming feel). Skipped for history and for reduced-motion users. */
 function Streamed({ text, animate, onDone }: { text: string; animate: boolean; onDone?: () => void }) {
@@ -70,7 +70,8 @@ export function ChatPanel({ onBook, busy, refreshKey }: { onBook: (optionId: str
   }, []);
 
   useEffect(() => { if (active && refreshKey) api.chats.get(active).then((c) => setCtx(c.context || {})).catch(() => {}); }, [refreshKey, active]);
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, typing]);
+  // Scroll only the message list: scrollIntoView would also drag the whole page down (visible on phones).
+  useEffect(() => { const list = bottom.current?.parentElement; if (list) list.scrollTo({ top: list.scrollHeight, behavior: "smooth" }); }, [msgs, typing]);
 
   const newChat = async () => {
     try { const c = await api.chats.create(); setActive(c.id); setCtx({}); setMsgs([WELCOME]); setDrawer(false); await loadList(); }
@@ -197,7 +198,7 @@ export function ChatPanel({ onBook, busy, refreshKey }: { onBook: (optionId: str
         </div>
         <form className="chat-form" onSubmit={(e) => { e.preventDefault(); send(input); }}>
           <label htmlFor="chat-input" className="sr-only">Message</label>
-          <textarea id="chat-input" className="input" rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKey} placeholder="Find a hotel in Jaipur under ₹1,500 (Enter to send, Shift+Enter for a new line)" maxLength={600} disabled={sending} />
+          <textarea id="chat-input" className="input" rows={1} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKey} placeholder="Book a hotel in Jaipur under ₹1,500 for tomorrow (Enter to send, Shift+Enter for a new line)" maxLength={600} disabled={sending} />
           <button className="btn btn-primary" disabled={sending || !input.trim()}>Send</button>
         </form>
       </div>

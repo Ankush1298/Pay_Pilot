@@ -35,7 +35,8 @@ class Gateway:
         self.user_id, self.username = user_id, username
         self.st = State(state)
         self._exec_key = hashlib.sha256(master + b"|exec|" + user_id.encode()).digest()   # never leaves this object
-        self.wallet = self.st.wallet_address or M.user_addr(user_id)
+        # Live mode: no address until the factory deploys the real smart account at registration.
+        self.wallet = self.st.wallet_address or (M.user_addr(user_id) if config.SIMULATED else None)
         self.ledger = Ledger(self._exec_key, self.wallet, ledger)
         self.on_revoke_session = lambda sid: None          # wired by the registry to the auth layer
         self.on_revoke_device = lambda did: None
@@ -164,6 +165,14 @@ class Gateway:
     def _device_cred_ids(self, device_id: str) -> list[str]:
         return [c["id"] for c in self.st.credentials.values() if c["device_id"] == device_id]
 
+    def _challenge(self, it: dict) -> str:
+        """base64url challenge the passkey signs. For on-chain payments it must be the contract's own intent hash."""
+        to = None
+        if it["type"] in PAY_TYPES or it["type"] == "p2p_transfer": to = it["pay_to"]
+        elif it["type"] == "modify_booking" and it["payload"]["delta"] > 0: to = self.st.bookings[it["payload"]["booking_id"]]["pay_to"]
+        onchain = self.ledger.chain_intent_hash(to, it["amount"], it) if to else None
+        return PK.b64u(bytes.fromhex(onchain or it["digest"]))
+
     def approval_options(self, sess: dict, intent_id: str, origin: str) -> dict:
         st = self.st
         self._require_trusted(sess)
@@ -177,7 +186,7 @@ class Gateway:
             ids = self._device_cred_ids(sess["device_id"])
         if not ids:
             raise GatewayError(409, "no_passkey", "Register a passkey before approving transactions")
-        challenge = PK.b64u(bytes.fromhex(it["digest"]))      # the signature covers THIS exact transaction
+        challenge = self._challenge(it)      # the signature covers THIS exact transaction
         try:
             return PK.assertion_options(st, origin, ids, challenge)
         except PK.PasskeyError as e:
@@ -246,6 +255,9 @@ class Gateway:
             st.log("intent", f"BLOCKED: {label}", "crit", intent_id=it["id"])
             if not lab or sess.get("lab"):
                 self._maybe_strike(sess, decision)
+        elif short := self._shortfall(it):
+            it["status"], it["error"] = "failed", short              # say so now, before any approval prompt
+            st.log("intent", f"REJECTED (insufficient funds): {label}", "warn", intent_id=it["id"])
         else:
             st.nonces.add(it["nonce"])
             if decision["verdict"] == "STEP_UP":
@@ -259,6 +271,19 @@ class Gateway:
                 st.log("intent", f"AUTO-APPROVED: {label}", "ok", intent_id=it["id"])
                 self._execute(it)
         return it
+
+    def _shortfall(self, it: dict) -> str | None:
+        """An error message when this payment costs more than the wallet holds, else None."""
+        t = it["type"]
+        if not (t in PAY_TYPES or t == "p2p_transfer" or (t == "modify_booking" and it["payload"].get("delta", 0) > 0)):
+            return None
+        try:
+            have = self.ledger.balance_tmon() * config.INR_PER_MON
+        except Exception:
+            return None                                              # RPC trouble: let the ledger decide at execution
+        if have + 1e-6 >= it["amount"]:
+            return None
+        return f"Insufficient balance: this needs {inr(it['amount'])} but your wallet has {inr(have)}. Add funds to your wallet first."
 
     def _maybe_strike(self, sess: dict, decision: dict):
         st = self.st
@@ -296,7 +321,7 @@ class Gateway:
         try:
             dev = st.devices.get(signer["id"])
             allowed = list(st.credentials.keys()) if (dev and dev["status"] == "pending") else self._device_cred_ids(signer["id"])
-            PK.verify_assertion(st, origin, credential or {}, PK.b64u(bytes.fromhex(it["digest"])), allowed)
+            PK.verify_assertion(st, origin, credential or {}, self._challenge(it), allowed)
         except (PK.PasskeyError, KeyError, TypeError) as e:
             st.log("approval", f"Rejected invalid passkey assertion for {it['id']}", "crit", intent_id=it["id"])
             raise GatewayError(403, getattr(e, "code", "bad_assertion"),

@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // macOS AppleDouble files created on non-HFS volumes
+    "**/._*",
   ]),
 ]);
 

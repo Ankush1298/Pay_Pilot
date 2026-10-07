@@ -94,7 +94,7 @@ def test_assertion_for_other_users_credential_rejected():
 
 def test_approval_rejects_assertion_over_wrong_challenge():
     c, a = register("sec-wrongchal")
-    search_and_prepare(c, "Find a hotel in Jaipur", idx=-1)
+    search_and_prepare(c, "Find a hotel in Jaipur tomorrow", idx=-1)
     it = c.get("/api/state").json()["pending"][0]
     ao = c.post(f"/api/intents/{it['id']}/approval-options", headers=H).json()
     bad = a.get(ao, challenge="AAAA")
@@ -219,3 +219,25 @@ def test_session_status_is_200_for_visitors_and_users():
     assert c.get("/api/auth/session").json()["authenticated"] is True
     anon = TestClient(app).get("/api/auth/session")
     assert anon.status_code == 200 and anon.json() == {"authenticated": False}
+
+
+def test_global_rate_limit_returns_429_with_retry_after(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    monkeypatch.setattr(config, "RATE_LIMIT_PER_MIN", 5)
+    c = TestClient(app)
+    codes = [c.get("/api/auth/session").status_code for _ in range(8)]
+    assert codes[:5] == [200] * 5 and set(codes[5:]) == {429}
+    r = c.get("/api/auth/session")
+    assert r.status_code == 429 and r.headers["retry-after"] == "60"
+    assert c.get("/api/health").status_code == 200            # health checks are exempt
+
+
+def test_client_ip_trusts_forwarded_for_only_from_the_local_proxy():
+    from starlette.requests import Request
+    from app import auth
+    def req(host, xff):
+        return Request({"type": "http", "client": (host, 1), "headers": [(b"x-forwarded-for", xff.encode())] if xff else []})
+    assert auth.client_ip(req("127.0.0.1", "6.6.6.6, 203.0.113.9")) == "203.0.113.9"      # spoofed first entry ignored
+    assert auth.client_ip(req("198.51.100.4", "6.6.6.6")) == "198.51.100.4"               # not our proxy: header ignored
+    assert auth.client_ip(req("127.0.0.1", "")) == "127.0.0.1"

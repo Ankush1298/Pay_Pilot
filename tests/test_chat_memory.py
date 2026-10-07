@@ -14,7 +14,7 @@ def say(c, text, cid=None):
 
 def test_city_carries_over_to_followups():
     c, _ = register("mem-carry")
-    first = say(c, "find a hotel in Jaipur")
+    first = say(c, "find a hotel in Jaipur tomorrow")
     cid = first["conversation_id"]
     cheapest = say(c, "book the cheapest one", cid)
     assert [o["city"] for o in cheapest["options"]] == ["Jaipur"]
@@ -27,7 +27,7 @@ def test_city_carries_over_to_followups():
 
 def test_newest_value_overrides_and_budget_is_remembered():
     c, _ = register("mem-override")
-    r1 = say(c, "find a hotel in Jaipur under 1000")
+    r1 = say(c, "find a hotel in Jaipur under 1000 tomorrow")
     cid = r1["conversation_id"]
     r2 = say(c, "actually Goa", cid)
     assert r2["context"]["city"] == "Goa" and r2["context"]["budget"] == 1000 and r2["options"]
@@ -37,7 +37,7 @@ def test_newest_value_overrides_and_budget_is_remembered():
 
 def test_new_chat_does_not_inherit_context_and_asks_instead_of_guessing():
     c, _ = register("mem-newchat")
-    say(c, "find a hotel in Jaipur")
+    say(c, "find a hotel in Jaipur tomorrow")
     fresh = c.post("/api/chat/conversations", headers=H).json()
     assert fresh["context"] == {}
     reply = say(c, "book the cheapest one", fresh["id"])
@@ -49,7 +49,7 @@ def test_new_chat_does_not_inherit_context_and_asks_instead_of_guessing():
 def test_two_users_never_see_each_others_history():
     ca, _ = register("mem-alice")
     cb, _ = register("mem-bob")
-    cid = say(ca, "find a hotel in Goa")["conversation_id"]
+    cid = say(ca, "find a hotel in Goa tomorrow")["conversation_id"]
     assert cb.get("/api/chat/conversations", headers=H).json() == []
     for call in (lambda: cb.get(f"/api/chat/conversations/{cid}"),
                  lambda: cb.patch(f"/api/chat/conversations/{cid}/context", json={"context": {"city": "Delhi"}}, headers=H),
@@ -61,7 +61,7 @@ def test_two_users_never_see_each_others_history():
 
 def test_history_survives_logout_and_login():
     c, a = register("mem-persist")
-    cid = say(c, "find a hotel in Jaipur")["conversation_id"]
+    cid = say(c, "find a hotel in Jaipur tomorrow")["conversation_id"]
     c.post("/api/auth/logout", headers=H)
     lo = c.post("/api/auth/login/options", headers=H).json()
     assert c.post("/api/auth/login/verify", json={"credential": a.get(lo)}, headers=H).status_code == 200
@@ -72,7 +72,7 @@ def test_history_survives_logout_and_login():
 
 def test_chip_edits_validate_and_apply_to_next_message():
     c, _ = register("mem-chips")
-    cid = say(c, "find a hotel in Jaipur under 1000")["conversation_id"]
+    cid = say(c, "find a hotel in Jaipur under 1000 tomorrow")["conversation_id"]
     url = f"/api/chat/conversations/{cid}/context"
     assert c.patch(url, json={"context": {"budget": -5}}, headers=H).status_code == 422
     assert c.patch(url, json={"context": {"kind": "movie"}}, headers=H).status_code == 422
@@ -84,7 +84,7 @@ def test_chip_edits_validate_and_apply_to_next_message():
 
 # ---------------------------------------------------------------- the security guarantee
 def prepare_cheapest_from_context(c):
-    cid = say(c, "find a hotel in Jaipur")["conversation_id"]
+    cid = say(c, "find a hotel in Jaipur tomorrow")["conversation_id"]
     opt = say(c, "book the cheapest one", cid)["options"][0]
     return cid, c.post("/api/agent/prepare", json={"option_id": opt["id"], "conversation_id": cid}, headers=H).json()
 
@@ -118,6 +118,15 @@ def test_digest_covers_inferred_values_and_matches_what_is_signed_and_settled():
 
 def test_fully_explicit_request_still_auto_approves():
     c, _ = register("mem-explicit")
-    opt = say(c, "find a hotel in Jaipur under 1000")["options"][0]
+    opt = say(c, "find a hotel in Jaipur under 1000 tomorrow")["options"][0]
     it = c.post("/api/agent/prepare", json={"option_id": opt["id"]}, headers=H).json()
     assert it["status"] == "executed" and "resolved_from_context" not in it["payload"]
+
+
+def test_asks_for_a_date_then_searches_when_given():
+    c, _ = register("mem-date")
+    first = say(c, "find a hotel in Jaipur")
+    assert first["needs"] == "dates" and first["options"] == []
+    cid = first["conversation_id"]
+    second = say(c, "next friday", cid)               # a bare date answers the question; city is remembered
+    assert second["options"] and second["context"]["city"] == "Jaipur" and second["context"]["dates"]["start"]

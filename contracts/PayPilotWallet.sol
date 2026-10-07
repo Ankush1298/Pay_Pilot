@@ -56,7 +56,7 @@ contract PayPilotWallet {
     ) external {
         require(!initialized, "already initialized");
         require(_policySigner != address(0), "bad policy signer");
-        require(P256.isValidPublicKey(pubX, pubY), "bad P256 key");
+        require(P256.isValidPublicKey(bytes32(pubX), bytes32(pubY)), "bad P256 key");
         initialized = true;
         policySigner = _policySigner;
         perTxLimit = _perTxLimit;
@@ -117,7 +117,7 @@ contract PayPilotWallet {
     /// account operation; this demo exposes it to the policy service only after the service has already
     /// authenticated the new credential server-side.
     function addPasskey(bytes32 keyId, uint256 x, uint256 y) external onlyPolicySigner {
-        require(P256.isValidPublicKey(x, y), "bad P256 key");
+        require(P256.isValidPublicKey(bytes32(x), bytes32(y)), "bad P256 key");
         passkeys[keyId] = P256PublicKey(x, y, true);
         passkeyIds.push(keyId);
         emit PasskeyAdded(keyId, x, y);

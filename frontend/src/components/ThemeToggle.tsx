@@ -3,15 +3,15 @@
 import { useEffect, useState } from "react";
 
 export const CONSENT_KEY = "pp_consent";
-const THEME_KEY = "pp_theme";
+const THEME_KEY = "pp_theme_v2";
 
 export function prefsAllowed(): boolean {
   try { return JSON.parse(localStorage.getItem(CONSENT_KEY) || "null")?.preferences === true; } catch { return false; }
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  useEffect(() => { setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark"); }, []);
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+  useEffect(() => { setTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light"); }, []);
   const toggle = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);

@@ -54,8 +54,8 @@
 .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .feature-grid > div { display: flex; }
 .feature-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 24px; flex: 1; transition: transform .2s, border-color .2s, box-shadow .2s; }
-.feature-card:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: var(--shadow-glow); }
-.feature-card svg { color: var(--accent); margin-bottom: 14px; }
+.feature-card:hover { transform: translateY(-4px); border-color: var(--accent-text); box-shadow: var(--shadow-glow); }
+.feature-card svg { color: var(--accent-text); margin-bottom: 14px; }
 .feature-card h3 { margin-bottom: 8px; font-size: 1.05rem; }
 .feature-card p { color: var(--text-secondary); font-size: .93rem; }
 @media (max-width: 900px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -101,10 +101,10 @@
 .threat-list span { color: var(--text-secondary); font-size: .93rem; }
 .faq { display: grid; gap: 10px; }
 .faq details { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-card); padding: 0 18px; transition: border-color .2s; }
-.faq details[open] { border-color: var(--accent); }
+.faq details[open] { border-color: var(--accent-text); }
 .faq summary { cursor: pointer; padding: 16px 0; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
 .faq summary::-webkit-details-marker { display: none; }
-.faq summary::after { content: "+"; color: var(--accent); font-size: 1.3rem; line-height: 1; transition: transform .2s; }
+.faq summary::after { content: "+"; color: var(--accent-text); font-size: 1.3rem; line-height: 1; transition: transform .2s; }
 .faq details[open] summary::after { transform: rotate(45deg); }
 .faq details p { padding-bottom: 16px; color: var(--text-secondary); animation: faq-in .25s ease; }
 @keyframes faq-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }

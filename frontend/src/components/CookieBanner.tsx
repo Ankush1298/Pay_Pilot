@@ -22,8 +22,8 @@ export function CookieBanner() {
     const c = { preferences, ts: Date.now() };
     try {
       localStorage.setItem(CONSENT_KEY, JSON.stringify(c));
-      if (!preferences) localStorage.removeItem("pp_theme");
-      else localStorage.setItem("pp_theme", document.documentElement.dataset.theme || "dark");
+      if (!preferences) localStorage.removeItem("pp_theme_v2");
+      else localStorage.setItem("pp_theme_v2", document.documentElement.dataset.theme || "light");
     } catch { /* storage blocked: choice only lasts for this page view */ }
     setConsent(c); setManage(false);
   };

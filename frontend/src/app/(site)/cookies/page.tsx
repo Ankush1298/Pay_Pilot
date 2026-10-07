@@ -13,7 +13,7 @@ export default function Page() {
         <tbody>
           <tr><td className="mono">il_sess</td><td>Essential cookie (HttpOnly, SameSite=Lax; Secure on HTTPS)</td><td>Keeps you signed in and lets us recognise a browser you have already trusted.</td><td>Up to 1 year; the sign-in session itself expires after 7 days on the server</td></tr>
           <tr><td className="mono">pp_consent</td><td>Local storage (essential)</td><td>Remembers your cookie choice.</td><td>Until you clear site data</td></tr>
-          <tr><td className="mono">pp_theme</td><td>Local storage (preference, only if you allow it)</td><td>Remembers light or dark mode.</td><td>Until you clear site data</td></tr>
+          <tr><td className="mono">pp_theme_v2</td><td>Local storage (preference, only if you allow it)</td><td>Remembers light or dark mode.</td><td>Until you clear site data</td></tr>
         </tbody>
       </table></div>
       <h2>Your choices</h2>

@@ -23,6 +23,7 @@ HOTEL_WORDS = ("hotel", "stay", "room", "resort", "night", "lodge")
 MONTHS = {m: i + 1 for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
 CONTEXT_KEYS = ("kind", "city", "dates", "budget", "guests", "units", "merchant", "currency", "last_selected")
 EDITABLE = ("city", "dates", "budget", "guests", "merchant")
+WEEKDAYS = {w: i for i, w in enumerate(["mon", "tue", "wed", "thu", "fri", "sat", "sun"])}
 _MON = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*"
 
 
@@ -67,6 +68,12 @@ def parse_dates(q: str, today: dt.date) -> dict | None:
         return {"text": f"{m.group(1)} weekend", "start": sat.isoformat(), "end": (sat + dt.timedelta(days=1)).isoformat()}
     if "next week" in q:
         d = _next_weekday(today, 0, skip_today=True); return {"text": "next week", "start": d.isoformat(), "end": None}
+    m = re.search(r"\b(?:(this|next|on)\s+)?(mon|tues?|wed(?:nes)?|thu(?:rs)?|fri|sat(?:ur)?|sun)(?:day)?\b", q)
+    if m:
+        d = _next_weekday(today, WEEKDAYS[m.group(2)[:3]], skip_today=True)
+        if m.group(1) == "next" and (d - today).days < 7:
+            d += dt.timedelta(days=7)
+        return {"text": f"{d:%A %d %b}", "start": d.isoformat(), "end": None}
     return None
 
 

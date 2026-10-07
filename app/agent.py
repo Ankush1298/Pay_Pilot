@@ -42,6 +42,10 @@ class Agent:
         if not ctx.get("city") and not explicit.get("url_domain"):
             return {**base, "text": f"Which city should I search for your {ctx['kind']}? I won't guess.", "needs": "city"}
         kind = ctx["kind"]
+        if not ctx.get("dates"):
+            what = "check in" if kind == "hotel" else "see the show"
+            return {**base, "text": f"Which date would you like to {what}? For example “tomorrow”, “12 Oct” or “12 Oct to 14 Oct”.",
+                    "needs": "dates"}
         resolved = [{"field": f, "value": ctx[f]["text"] if f == "dates" else ctx[f], "source": "earlier in this chat"}
                     for f in ("city", "dates", "budget", "guests", "merchant", "units")
                     if ctx.get(f) not in (None, "") and f not in explicit]

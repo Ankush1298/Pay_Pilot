@@ -28,7 +28,7 @@ def test_register_login_autoapprove_and_ledger():
     lo = c.post("/api/auth/login/options", headers=H).json()
     r = c.post("/api/auth/login/verify", json={"credential": a.get(lo)}, headers=H)
     assert r.status_code == 200 and r.json()["new_device"] is False
-    it = search_and_prepare(c, "Find a hotel in Jaipur under 1000")
+    it = search_and_prepare(c, "Find a hotel in Jaipur under 1000 tomorrow")
     assert it["status"] == "executed" and it["booking_id"] and it["tx_hash"]
     st = c.get("/api/state").json()
     assert st["bookings"][0]["id"] == it["booking_id"] and st["ledger"]["txs"][0]["tx_hash"] == it["tx_hash"]
@@ -36,7 +36,7 @@ def test_register_login_autoapprove_and_ledger():
 
 def test_step_up_with_passkey_assertion_then_execute():
     c, a = register("e2e-stepup")
-    it = search_and_prepare(c, "Find a hotel in Jaipur", idx=-1)
+    it = search_and_prepare(c, "Find a hotel in Jaipur tomorrow", idx=-1)
     pending = [i for i in c.get("/api/state").json()["pending"]]
     it = next(p for p in pending)
     assert it["status"] == "pending_approval"
@@ -46,3 +46,12 @@ def test_step_up_with_passkey_assertion_then_execute():
     # single use: the same intent cannot be approved or executed again
     again = c.post(f"/api/intents/{it['id']}/approve", json={"credential": a.get(ao)}, headers=H)
     assert again.status_code == 409
+
+
+def test_booking_more_than_balance_is_refused_before_approval(monkeypatch):
+    from app.ledger import Ledger
+    c, _ = register("e2e-broke")
+    monkeypatch.setattr(Ledger, "balance_tmon", lambda self: 0.0)
+    it = search_and_prepare(c, "Find a hotel in Jaipur tomorrow", idx=-1)       # would normally need a passkey approval
+    assert it["status"] == "failed" and "Insufficient balance" in it["error"] and not it["tx_hash"]
+    assert c.get("/api/state").json()["pending"] == []

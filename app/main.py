@@ -36,6 +36,10 @@ async def unhandled(request: Request, exc: Exception):
 # --------------------------------------------------------------- middleware
 @app.middleware("http")
 async def security(request: Request, call_next):
+    if request.url.path.startswith("/api/") and request.url.path != "/api/health":
+        if not auth.LIMITER.allow(f"ip:{auth.client_ip(request)}", config.RATE_LIMIT_PER_MIN, 60):
+            return JSONResponse({"detail": {"code": "rate_limited", "message": "Too many requests. Slow down and try again shortly."}},
+                                429, headers={"Retry-After": "60"})
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/"):
         origin = request.headers.get("origin")
         if origin and origin.rstrip("/") not in config.ORIGINS:        # CSRF defence (plus SameSite=Lax cookies)
@@ -186,7 +190,7 @@ def register_verify(req: RegisterVerifyReq, request: Request, response: Response
         except Exception:
             # Do not leave an account claiming to be on-chain when deployment is unavailable.
             log.exception("smart-account setup failed")
-            auth._users.pop(user_id, None); auth._usernames.pop(username.lower(), None)
+            auth.delete_user(user_id)
             raise auth.AuthError(503, "wallet_setup_failed", "Smart-account setup failed")
         dtoken = auth.bind_device(user_id, dev["id"]); token, sid = auth.new_session(user_id, dev["id"], ip, ua)
         gw.ensure_session(sid, dev["id"]); gw.st.onboarding_open = False; gw.st.log("account", "Account created with a discoverable passkey", "ok")
@@ -391,6 +395,7 @@ def delete_conversation(cid: str, a: Auth = Depends(auth.require)):
 
 @app.post("/api/agent/prepare")
 def agent_prepare(req: PrepareReq, a: Auth = Depends(auth.require)):
+    limit(f"prep:{a.user_id}", 30, 300)
     it = run(a, lambda gw, s: AGENT.prepare(gw, s, a.user_id, req.option_id))
     if req.conversation_id and (conv := chat_store.get(a.user_id, req.conversation_id)):
         chat_store.set_context(a.user_id, conv["id"], {**conv["context"], "last_selected": {
