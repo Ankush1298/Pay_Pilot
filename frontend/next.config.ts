@@ -36,11 +36,11 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/:path*`,
+        source: "/api/:path*",
         destination: `${backend}/api/:path*`,
       },
       {
-        source: "/merchant/:path*`,
+        source: "/merchant/:path*",
         destination: `${backend}/merchant/:path*`,
       },
       {
