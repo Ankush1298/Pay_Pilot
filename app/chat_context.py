@@ -49,6 +49,15 @@ def parse_dates(q: str, today: dt.date) -> dict | None:
             return {"text": " to ".join(iso[:2]), "start": s.isoformat(), "end": e.isoformat() if e else None}
     except ValueError:
         return None
+    # "15-18 oct", "15 to 18 oct", "oct 15-18": one month shared by both days
+    _SEP = r"\s*(?:-|\u2013|\u2014|to|until|till|through)\s*"
+    rng = re.search(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?{_SEP}(\d{{1,2}})(?:st|nd|rd|th)?\s+{_MON}\b", q)
+    if rng:
+        d1, d2, mon = int(rng.group(1)), int(rng.group(2)), rng.group(3)
+    elif rng := re.search(rf"\b{_MON}\s+(\d{{1,2}})(?:st|nd|rd|th)?{_SEP}(\d{{1,2}})(?:st|nd|rd|th)?\b", q):
+        mon, d1, d2 = rng.group(1), int(rng.group(2)), int(rng.group(3))
+    if rng and (a := _date(d1, mon, today)) and (b := _date(d2, mon, today)) and a < b:
+        return {"text": f"{a:%d %b} to {b:%d %b}", "start": a.isoformat(), "end": b.isoformat()}
     found = [(int(m.group(1)), m.group(2)) for m in re.finditer(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+{_MON}\b", q)]
     found += [(int(m.group(2)), m.group(1)) for m in re.finditer(rf"\b{_MON}\s+(\d{{1,2}})\b", q)]
     ds = [d for d in (_date(day, mon, today) for day, mon in found[:2]) if d]
