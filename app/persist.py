@@ -10,6 +10,7 @@ import time
 
 from sqlalchemy import select
 from sqlalchemy.dialects.mysql import insert as mysql_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 
@@ -38,6 +39,8 @@ def _upsert(c, uid: str, vals: dict) -> None:
     """One atomic statement: no UPDATE-then-INSERT gap locks, so concurrent users cannot deadlock each other."""
     if engine.dialect.name == "mysql":
         c.execute(mysql_insert(gateways).values(user_id=uid, **vals).on_duplicate_key_update(**vals))
+    elif engine.dialect.name == "postgresql":
+        c.execute(pg_insert(gateways).values(user_id=uid, **vals).on_conflict_do_update(index_elements=["user_id"], set_=vals))
     else:
         c.execute(sqlite_insert(gateways).values(user_id=uid, **vals).on_conflict_do_update(index_elements=["user_id"], set_=vals))
 
