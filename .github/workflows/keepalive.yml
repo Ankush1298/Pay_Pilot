@@ -1,10 +1,10 @@
-# Free keep-alive: pings the hosted API every 10 minutes so the free Render service never sleeps
+# Free keep-alive: pings the hosted API every 5 minutes so the free Render service never sleeps
 # and the free Supabase database never pauses (deep=1 runs SELECT 1). Scheduled workflows only run
 # from the default branch (main).
 name: keepalive
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 jobs:
   ping:
