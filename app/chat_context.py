@@ -100,6 +100,11 @@ def parse_message(msg: str, today: dt.date | None = None) -> dict[str, Any]:
         out["budget"] = float(m.group(1).replace(",", ""))
     if d := parse_dates(q, today):
         out["dates"] = d
+        # "15th oct to 18th oct" = 3 nights. An explicit "N nights" in the same message still wins.
+        if "units" not in out and d.get("end") and not (movie and not hotel):
+            nights = (dt.date.fromisoformat(d["end"]) - dt.date.fromisoformat(d["start"])).days
+            if nights >= 1:
+                out["units"] = min(nights, 30)
     for dom in M.REGISTRY:
         if re.search(rf"\b{re.escape(dom.split('.')[0])}\b", q):
             out["merchant"] = dom
