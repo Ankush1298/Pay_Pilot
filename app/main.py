@@ -492,7 +492,15 @@ def merchant_authorize_post(domain: str, request: Request, member: str = Form(""
 
 
 @app.get("/api/health")
-def health():
+def health(deep: bool = False):
+    """deep=1 also runs SELECT 1 on the database (used by keep-alive pings so a free-tier database is not paused as idle)."""
+    if deep:
+        from sqlalchemy import text
+        from .db import engine
+        try:
+            with engine.connect() as c: c.execute(text("SELECT 1"))
+        except Exception:
+            raise HTTPException(503, {"code": "db_unavailable", "message": "Database unreachable"})
     return {"ok": True, "ledger": Ledger.network}
 
 

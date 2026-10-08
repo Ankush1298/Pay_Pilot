@@ -1,0 +1,15 @@
+# Free keep-alive: pings the hosted API every 10 minutes so the free Render service never sleeps
+# and the free Supabase database never pauses (deep=1 runs SELECT 1). Scheduled workflows only run
+# from the default branch (main).
+name: keepalive
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping API (wakes it if asleep, touches the database)
+        run: curl -fsS --retry 4 --retry-delay 20 --retry-all-errors --max-time 90 "https://pay-pilot-api.onrender.com/api/health?deep=1"
