@@ -108,7 +108,11 @@ def evaluate(st, it: dict, recheck: bool = False) -> dict:
         else:
             add("step_up", "intent_unbound", "This agent action has no bound user intent", 30)
 
-    if t in PAY_TYPES and (it.get("payload") or {}).get("resolved_from_context"):
+    # a city carried over from earlier in the chat is already bound to the user's intent (mismatch = block),
+    # so only inferred details that can change what is bought or paid need a second look
+    inferred = [r for r in ((it.get("payload") or {}).get("resolved_from_context") or [])
+                if not (isinstance(r, dict) and r.get("field") == "city")]
+    if t in PAY_TYPES and inferred:
         add("step_up", "context_inferred", "Some details were filled in from earlier in the conversation. Check them before approving", 25)
 
     # ---- merchant checks (done here, never trusted from the agent) -----
