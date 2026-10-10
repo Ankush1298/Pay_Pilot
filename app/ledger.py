@@ -6,7 +6,7 @@ through the smart account in contracts/; it needs a deployed factory, a funded r
 In live mode the relayer pays gas but never owns the user's smart-account funds.
 """
 from __future__ import annotations
-import base64, hashlib, json, time
+import base64, hashlib, hmac, json, time
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from . import config
@@ -16,6 +16,7 @@ class LedgerError(Exception): pass
 
 class MockLedger:
     network = "simulated"
+    deposit_address = None          # live mode only
     def __init__(self, auth_key: bytes, user_addr: str, data=None, start_tmon=0.0):
         self._key, self.user_addr = auth_key, user_addr
         self.txs = data.get("txs", []) if data else []
@@ -118,9 +119,44 @@ else:
             self._key = auth_key
             self.user_addr = _checksum(user_addr) if user_addr else None  # web3 rejects non-checksum addresses
             self.txs = data.get("txs", []) if data else []
+            self._last_sweep = 0.0
         def to_dict(self): return {"txs": self.txs}
         def balance_tmon(self):
             return w3.eth.get_balance(self.user_addr) / 1e18 if self.user_addr else 0.0
+
+        # ---- faucet deposit address -------------------------------------------------------------
+        # The smart account is an EIP-1167 clone, so a plain transfer needs more gas than the 2300 that
+        # faucet contracts forward, and every faucet payout to it fails. People paste THIS ordinary address
+        # into the faucet instead; whatever arrives is forwarded to the user's own smart account, and only there.
+        def _deposit_account(self):
+            return Account.from_key(hmac.new(self._key, b"paypilot-faucet-deposit-v1", hashlib.sha256).digest())
+
+        @property
+        def deposit_address(self):
+            return self._deposit_account().address if self.user_addr else None
+
+        def sweep_deposit(self, min_interval: float = 8.0):
+            """Forward the deposit address's balance (minus the network fee) into the user's smart account."""
+            if not self.user_addr: return None
+            now = time.time()
+            if now - self._last_sweep < min_interval: return None
+            self._last_sweep = now
+            acct = self._deposit_account()
+            bal = w3.eth.get_balance(acct.address)
+            if bal <= 0: return None
+            target = _checksum(self.user_addr)
+            price = w3.eth.gas_price
+            try: est = w3.eth.estimate_gas({"from": acct.address, "to": target, "value": 1})
+            except Exception: est = 60_000                       # clone forwarding to the implementation needs well under this
+            gas = max(int(est * 1.5), 50_000)                    # Monad charges the gas limit, so keep it modest
+            value = bal - gas * price
+            if value <= 0: return None                           # dust: not worth forwarding yet
+            tx = {"to": target, "value": value, "gas": gas, "gasPrice": price, "chainId": w3.eth.chain_id,
+                  "nonce": w3.eth.get_transaction_count(acct.address, "pending")}
+            h = w3.eth.send_raw_transaction(acct.sign_transaction(tx).raw_transaction)
+            receipt = w3.eth.wait_for_transaction_receipt(h, timeout=120)
+            if receipt.status != 1: raise LedgerError("Forwarding the faucet deposit failed")
+            return {"tx_hash": w3.to_hex(h), "amount_tmon": value / 1e18}
         def faucet(self): raise LedgerError(f"Fund the smart account and relayer via {config.FAUCET_URL}")
         def initialize_wallet(self, credential: dict, per_tx=1500, daily=5000, trusted_merchants=None):
             if self.user_addr: return self.user_addr

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import logging
 import secrets
 import time
 
@@ -19,6 +20,8 @@ from .crypto import digest as make_digest, hmac_tag
 from .ledger import Ledger, LedgerError
 from .policy import PAY_TYPES, STRIKE_RULES, evaluate, inr, valid_policy_change
 from .state import State
+
+log = logging.getLogger("paypilot.gateway")
 
 DIGEST_FIELDS = ["type", "merchant_domain", "pay_to", "amount", "currency", "purpose", "payload",
                  "expiry", "nonce", "device_id"]
@@ -441,6 +444,10 @@ class Gateway:
     # -------------------------------------------------------------- views
     def public_state(self, sess: dict) -> dict:
         st = self.st
+        sweep = getattr(self.ledger, "sweep_deposit", None)
+        if sweep:                       # live mode: forward any faucet money sitting on the deposit address
+            try: sweep()
+            except Exception as e: log.warning("faucet deposit forwarding failed: %s", e)
         dev = st.devices.get(sess["device_id"])
         pub = lambda d: {k: v for k, v in d.items() if k not in {"token"}}
         intents = sorted((i for i in st.intents.values() if not i.get("lab")), key=lambda i: -i["created_at"])
@@ -458,6 +465,7 @@ class Gateway:
             "alerts": list(reversed(st.alerts[-30:])), "audit": list(reversed(st.audit[-80:])),
             "spent_24h": st.spent_since(st.now() - 86400),
             "ledger": {"network": self.ledger.network, "simulated": self.ledger.network == "simulated", "address": self.wallet,
+                       "deposit_address": getattr(self.ledger, "deposit_address", None),
                        "faucet_url": None if self.ledger.network == "simulated" else config.FAUCET_URL,
                        "explorer_url": None if self.ledger.network == "simulated" else config.EXPLORER_URL,
                        "balance_tmon": self.ledger.balance_tmon(),

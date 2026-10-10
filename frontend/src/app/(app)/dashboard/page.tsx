@@ -195,14 +195,16 @@ export default function Dashboard() {
             <div className="wallet-balance">{money(state?.ledger?.balance_inr)}</div>
             {!state?.ledger?.simulated && (
               <div style={{ marginTop: ".75rem" }}>
-                <div className="text-sm" style={{ fontWeight: 600 }}>Your wallet address</div>
-                <div className="text-sm text-muted" style={{ marginBottom: ".4rem" }}>This is a smart account. Send it testnet MON from your own wallet (MetaMask etc.).</div>
-                <div className="mono" style={{ wordBreak: "break-all", fontSize: ".82rem", padding: ".6rem .7rem", border: "1px solid var(--border, #2a3340)", borderRadius: 8, userSelect: "all" }}>{state?.ledger?.address || "Creating your wallet…"}</div>
+                <div className="text-sm" style={{ fontWeight: 600 }}>Faucet deposit address</div>
+                <div className="text-sm text-muted" style={{ marginBottom: ".4rem" }}>Paste this address into the faucet. Whatever arrives is forwarded to your smart account automatically (a few seconds, refresh to see it).</div>
+                <div className="mono" style={{ wordBreak: "break-all", fontSize: ".82rem", padding: ".6rem .7rem", border: "1px solid var(--border, #2a3340)", borderRadius: 8, userSelect: "all" }}>{state?.ledger?.deposit_address || "Creating your wallet…"}</div>
                 <div style={{ display: "flex", gap: ".5rem", marginTop: ".6rem", flexWrap: "wrap" }}>
-                  <button className="btn btn-primary btn-sm" disabled={!state?.ledger?.address} onClick={async () => { const ok = await copyText(state.ledger.address); if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); } show(ok ? "ok" : "warn", ok ? "Wallet address copied" : "Copy failed. Select the address and copy it manually."); }}>{copied ? "Copied ✓" : "Copy address"}</button>
-                  {state?.ledger?.faucet_url && <button className="btn btn-sm" onClick={() => window.open(state.ledger.faucet_url, "_blank", "noopener,noreferrer")}>Open faucet (claim to your own wallet)</button>}
+                  <button className="btn btn-primary btn-sm" disabled={!state?.ledger?.deposit_address} onClick={async () => { const ok = await copyText(state.ledger.deposit_address); if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); } show(ok ? "ok" : "warn", ok ? "Deposit address copied" : "Copy failed. Select the address and copy it manually."); }}>{copied ? "Copied ✓" : "Copy address"}</button>
+                  {state?.ledger?.faucet_url && <button className="btn btn-sm" onClick={() => window.open(state.ledger.faucet_url, "_blank", "noopener,noreferrer")}>Open faucet</button>}
                 </div>
-                <div className="text-sm text-muted" style={{ marginTop: ".5rem" }}>Faucets can't send straight to a smart account (their 2300-gas transfer fails). Claim MON to your own wallet first, then send e.g. 0.2 MON from that wallet to the address above. Refresh after it confirms.</div>
+                <div className="text-sm" style={{ fontWeight: 600, marginTop: "1rem" }}>Your smart account</div>
+                <div className="text-sm text-muted" style={{ marginBottom: ".4rem" }}>Holds your funds and approves payments with your passkey. You can also send MON here directly from your own wallet (faucets cannot pay it directly).</div>
+                <div className="mono" style={{ wordBreak: "break-all", fontSize: ".78rem", padding: ".5rem .7rem", border: "1px solid var(--border, #2a3340)", borderRadius: 8, userSelect: "all" }}>{state?.ledger?.address || "Creating your wallet…"}</div>
               </div>
             )}
             {state?.ledger?.simulated && <div className="mono address">{state?.ledger?.address || "—"}</div>}
