@@ -196,13 +196,13 @@ export default function Dashboard() {
             {!state?.ledger?.simulated && (
               <div style={{ marginTop: ".75rem" }}>
                 <div className="text-sm" style={{ fontWeight: 600 }}>Your wallet address</div>
-                <div className="text-sm text-muted" style={{ marginBottom: ".4rem" }}>Send testnet MON to this address to fund payments.</div>
+                <div className="text-sm text-muted" style={{ marginBottom: ".4rem" }}>This is a smart account. Send it testnet MON from your own wallet (MetaMask etc.).</div>
                 <div className="mono" style={{ wordBreak: "break-all", fontSize: ".82rem", padding: ".6rem .7rem", border: "1px solid var(--border, #2a3340)", borderRadius: 8, userSelect: "all" }}>{state?.ledger?.address || "Creating your wallet…"}</div>
                 <div style={{ display: "flex", gap: ".5rem", marginTop: ".6rem", flexWrap: "wrap" }}>
                   <button className="btn btn-primary btn-sm" disabled={!state?.ledger?.address} onClick={async () => { const ok = await copyText(state.ledger.address); if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); } show(ok ? "ok" : "warn", ok ? "Wallet address copied" : "Copy failed. Select the address and copy it manually."); }}>{copied ? "Copied ✓" : "Copy address"}</button>
-                  {state?.ledger?.faucet_url && <button className="btn btn-sm" onClick={() => window.open(state.ledger.faucet_url, "_blank", "noopener,noreferrer")}>Open faucet</button>}
+                  {state?.ledger?.faucet_url && <button className="btn btn-sm" onClick={() => window.open(state.ledger.faucet_url, "_blank", "noopener,noreferrer")}>Open faucet (claim to your own wallet)</button>}
                 </div>
-                <div className="text-sm text-muted" style={{ marginTop: ".5rem" }}>Copy the address first, then paste it into the faucet. Refresh after funds arrive.</div>
+                <div className="text-sm text-muted" style={{ marginTop: ".5rem" }}>Faucets can't send straight to a smart account (their 2300-gas transfer fails). Claim MON to your own wallet first, then send e.g. 0.2 MON from that wallet to the address above. Refresh after it confirms.</div>
               </div>
             )}
             {state?.ledger?.simulated && <div className="mono address">{state?.ledger?.address || "—"}</div>}
