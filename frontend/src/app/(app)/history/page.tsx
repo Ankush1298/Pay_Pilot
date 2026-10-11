@@ -13,8 +13,21 @@ export default function HistoryPage() {
   const { show } = useToast();
   const [s, setS] = useState<any>(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (user) api.state.get().then(setS).catch((e: any) => show("crit", e.message)); }, [user]);
-  if (!user || !s) return null;
+  useEffect(() => {
+if (user) {
+api.state.get()
+.then(setS)
+.catch((e: any) => show("crit", e.message));
+}
+}, [user]);
+
+if (!user) return null;
+
+if (!s) {
+return ( <div className="page" role="status" aria-live="polite"> <div className="page-header"> <div> <div className="eyebrow">ACCOUNT HISTORY</div> <h1>Activity & history</h1> <p>Loading your bookings, transactions and security events...</p> </div> </div> <div className="spinner" /> </div>
+);
+}
+
   const bookings = s.bookings || [];
   const txs = s.ledger?.txs || [];
   const audit = s.audit || [];
