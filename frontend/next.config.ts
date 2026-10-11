@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const isProd = process.env.NODE_ENV === "production";
 // Where the FastAPI backend runs. On Vercel set BACKEND_URL (e.g. https://paypilot-api.onrender.com), no trailing slash.
-const backend = (process.env.BACKEND_URL ?? "http://127.0.0.1:8001").replace(/\/$/,"",);
+const backend = (process.env.BACKEND_URL ?? "http://127.0.0.1:8001").replace(/\/$/, "");
 
 // Next.js needs inline scripts/styles for hydration; everything else is locked to this origin.
 const csp = [
@@ -23,14 +23,8 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "no-referrer" },
-  {
-    key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=()",
-  },
-  {
-    key: "Strict-Transport-Security",
-    value: "max-age=31536000; includeSubDomains",
-  },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+  { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
 ];
 
 const nextConfig: NextConfig = {
