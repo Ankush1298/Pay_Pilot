@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const isProd = process.env.NODE_ENV === "production";
 // Where the FastAPI backend runs. On Vercel set BACKEND_URL (e.g. https://paypilot-api.onrender.com), no trailing slash.
-const backend = (process.env.BACKEND_URL ?? "http://127.0.0.1:8000").replace(
+const backend = (process.env.BACKEND_URL ?? "http://127.0.0.1:8001").replace(
   /\/$/,
   "",
 );
