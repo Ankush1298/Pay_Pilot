@@ -10,6 +10,23 @@ phrase, no recovery codes.
 This is a hackathon demo. It runs entirely on your machine: **no deployment, no wallet, no tokens.**
 The ledger is simulated by default (see "What is real and what is simulated").
 
+## Live demo and hosting
+
+The hosted demo runs on free tiers, always on, against the **Monad testnet** (test tokens only, no real money):
+
+| Part | Where |
+|---|---|
+| Frontend (Next.js) | Vercel, proxying `/api/*` to the backend via `BACKEND_URL` |
+| Backend (FastAPI) | Render (Docker), kept awake by a scheduled health ping |
+| Database | Supabase Postgres (isolated `paypilot` schema), so accounts and history survive restarts |
+| Chain | Monad testnet: relayer pays gas, policy signer approves, each user gets an EIP-1167 smart account |
+
+Setup steps and environment variables are in [DEPLOY.md](DEPLOY.md). Notes for users of the hosted demo:
+
+- **Funding:** the dashboard shows a *Faucet deposit address*. Send testnet MON there from any faucet; it is forwarded into your smart account automatically (faucets cannot pay the smart account directly).
+- **Passkeys:** needs a device with a screen lock (Windows Hello PIN, fingerprint, face, or phone). Open the site in a normal browser, not an in-app one.
+- **Bookings:** nights are read from date ranges such as `15-18 oct`. Bookings of up to INR 1,500 auto-approve by default; larger ones ask for a passkey. A city carried over from earlier in the chat does not force one.
+
 ## Run it
 
 Two terminals.
